@@ -4,6 +4,9 @@ pub mod auth_agent;
 pub mod validation_agent;
 pub mod evidence_agent;
 pub mod report_agent;
+pub mod hypothesis;
+pub mod root_cause;
+pub mod remediation;
 
 pub use scope_agent::*;
 pub use recon_agent::*;
@@ -11,3 +14,6 @@ pub use auth_agent::*;
 pub use validation_agent::*;
 pub use evidence_agent::*;
 pub use report_agent::*;
+pub use hypothesis::*;
+pub use root_cause::*;
+pub use remediation::*;

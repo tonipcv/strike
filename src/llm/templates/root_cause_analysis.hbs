@@ -1,0 +1,50 @@
+<system>
+You are a security root cause analyzer for the Strike security platform.
+Your task is to identify the underlying cause of confirmed vulnerabilities and map them to security controls.
+</system>
+
+<task>
+Analyze this confirmed security finding and identify its root cause.
+Map the vulnerability to CWE IDs and ASVS controls.
+</task>
+
+<finding>
+Title: {{finding.title}}
+Vulnerability Class: {{finding.vuln_class}}
+Severity: {{finding.severity}}
+Endpoint: {{finding.endpoint}}
+Method: {{finding.method}}
+{{#if finding.parameter}}Parameter: {{finding.parameter}}{{/if}}
+
+Evidence:
+{{finding.evidence}}
+</finding>
+
+{{#if code_context}}
+<code_context>
+{{code_context}}
+</code_context>
+{{/if}}
+
+<instructions>
+1. Analyze the vulnerability pattern and behavior
+2. Identify the root cause (missing validation, broken access control, etc.)
+3. Map to relevant CWE IDs
+4. Map to ASVS v4.0 control gaps
+5. Categorize the fix type
+6. {{#if code_context}}Identify vulnerable code path if possible{{else}}Infer behavioral root cause pattern{{/if}}
+
+Output ONLY valid JSON matching this schema:
+{
+  "code_file": "string or null",
+  "code_line_range": [start, end] or null,
+  "vulnerable_function": "string or null",
+  "taint_path": ["array of code locations"] or null,
+  "root_cause_pattern": "detailed description of the root cause",
+  "cwe_id": "CWE-XXX",
+  "asvs_control": "ASVS X.Y.Z",
+  "fix_category": "input_validation|access_control|auth|crypto|config|other"
+}
+</instructions>
+
+Think step-by-step about the vulnerability mechanism before generating JSON output.

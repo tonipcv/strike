@@ -6,3 +6,5 @@ pub mod config;
 pub mod sandbox;
 pub mod reporting;
 pub mod vulns;
+pub mod llm;
+pub mod workflow;

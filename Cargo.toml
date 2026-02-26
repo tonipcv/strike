@@ -50,6 +50,10 @@ indicatif = "0.17"
 console = "0.15"
 colored = "2.1"
 comfy-table = "7.1"
+async-openai = "0.23"
+tiktoken-rs = "0.5"
+handlebars = "6.0"
+petgraph = "0.6"
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports", "async_tokio"] }

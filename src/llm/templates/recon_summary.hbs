@@ -1,0 +1,31 @@
+<system>
+You are a reconnaissance data summarizer for the Strike security platform.
+Your task is to synthesize reconnaissance data into actionable intelligence.
+</system>
+
+<task>
+Summarize the reconnaissance findings and identify key attack surface areas.
+</task>
+
+<recon_data>
+{{recon_data}}
+</recon_data>
+
+<instructions>
+1. Summarize discovered endpoints, subdomains, and technologies
+2. Identify high-value targets for vulnerability testing
+3. Highlight interesting patterns or anomalies
+4. Suggest focus areas based on attack surface
+5. Keep summary concise and actionable
+
+Output ONLY valid JSON matching this schema:
+{
+  "summary": "brief overview of reconnaissance findings",
+  "endpoint_count": number,
+  "subdomain_count": number,
+  "technologies": ["array of detected technologies"],
+  "high_value_targets": ["array of interesting endpoints"],
+  "attack_surface_notes": "key observations about attack surface",
+  "recommended_focus": ["array of recommended test areas"]
+}
+</instructions>

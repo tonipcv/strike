@@ -7,6 +7,8 @@ mod config;
 mod sandbox;
 mod reporting;
 mod vulns;
+mod llm;
+mod workflow;
 
 use clap::Parser;
 use cli::{Cli, Commands};
