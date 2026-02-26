@@ -1,0 +1,64 @@
+[package]
+name = "strike-security"
+version = "0.1.0"
+edition = "2021"
+authors = ["Strike Team"]
+description = "Evidence-first CLI security validation platform"
+license-file = "LICENSE"
+repository = "https://github.com/xaseai/strike"
+keywords = ["security", "pentesting", "vulnerability", "cli", "validation"]
+categories = ["command-line-utilities", "development-tools"]
+readme = "README.md"
+
+[lib]
+name = "strike_security"
+path = "src/lib.rs"
+
+[[bin]]
+name = "strike"
+path = "src/main.rs"
+
+[dependencies]
+tokio = { version = "1.41", features = ["full"] }
+clap = { version = "4.5", features = ["derive", "env"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite", "postgres", "uuid", "chrono", "json"] }
+uuid = { version = "1.11", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+anyhow = "1.0"
+thiserror = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+toml = "0.8"
+async-trait = "0.1"
+futures = "0.3"
+url = "2.5"
+regex = "1.11"
+base64 = "0.22"
+urlencoding = "2.1"
+sha2 = "0.10"
+ring = "0.17"
+rustls = { version = "0.23", features = ["std"] }
+trust-dns-resolver = "0.23"
+bollard = "0.17"
+opentelemetry = { version = "0.24", features = ["trace"] }
+opentelemetry_sdk = { version = "0.24", features = ["rt-tokio"] }
+serde_yaml = "0.9"
+indicatif = "0.17"
+console = "0.15"
+colored = "2.1"
+comfy-table = "7.1"
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports", "async_tokio"] }
+mockito = "1.5"
+tempfile = "3.13"
+tokio-test = "0.4"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
