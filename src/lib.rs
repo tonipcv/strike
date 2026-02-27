@@ -8,3 +8,5 @@ pub mod reporting;
 pub mod vulns;
 pub mod llm;
 pub mod workflow;
+pub mod ci;
+pub mod benchmark;

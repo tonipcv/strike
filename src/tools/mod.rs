@@ -1,7 +1,19 @@
 pub mod http_client;
 pub mod port_scanner;
 pub mod dns_resolver;
+pub mod browser;
+pub mod traffic_replayer;
+pub mod jwt_inspector;
+pub mod header_analyzer;
+pub mod api_fuzzer;
+pub mod fingerprinter;
 
 pub use http_client::*;
 pub use port_scanner::*;
 pub use dns_resolver::*;
+pub use browser::*;
+pub use traffic_replayer::*;
+pub use jwt_inspector::*;
+pub use header_analyzer::*;
+pub use api_fuzzer::*;
+pub use fingerprinter::*;

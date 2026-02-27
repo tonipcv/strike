@@ -7,6 +7,7 @@ pub mod report_agent;
 pub mod hypothesis;
 pub mod root_cause;
 pub mod remediation;
+pub mod retest;
 
 pub use scope_agent::*;
 pub use recon_agent::*;
@@ -17,3 +18,4 @@ pub use report_agent::*;
 pub use hypothesis::*;
 pub use root_cause::*;
 pub use remediation::*;
+pub use retest::*;

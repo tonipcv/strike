@@ -54,6 +54,11 @@ async-openai = "0.23"
 tiktoken-rs = "0.5"
 handlebars = "6.0"
 petgraph = "0.6"
+chromiumoxide = { version = "0.7", features = ["tokio-runtime"], optional = true }
+
+[features]
+default = []
+browser = ["chromiumoxide"]
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports", "async_tokio"] }

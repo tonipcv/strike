@@ -9,6 +9,8 @@ mod reporting;
 mod vulns;
 mod llm;
 mod workflow;
+mod ci;
+mod benchmark;
 
 use clap::Parser;
 use cli::{Cli, Commands};
