@@ -28,6 +28,21 @@ impl CheckpointManager {
     pub async fn ensure_tables(&self) -> Result<()> {
         sqlx::query(
             r#"
+            CREATE TABLE IF NOT EXISTS run_states (
+                id TEXT PRIMARY KEY,
+                target TEXT NOT NULL,
+                environment TEXT NOT NULL,
+                status TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            "#
+        )
+        .execute(&self.pool)
+        .await?;
+        
+        sqlx::query(
+            r#"
             CREATE TABLE IF NOT EXISTS run_checkpoints (
                 id TEXT PRIMARY KEY,
                 run_id TEXT NOT NULL,
@@ -214,11 +229,7 @@ mod tests {
     use tempfile::tempdir;
 
     async fn create_test_pool() -> SqlitePool {
-        let dir = tempdir().unwrap();
-        let db_path = dir.path().join("test.db");
-        let db_url = format!("sqlite:{}", db_path.display());
-        
-        SqlitePool::connect(&db_url).await.unwrap()
+        SqlitePool::connect("sqlite::memory:").await.unwrap()
     }
 
     #[tokio::test]

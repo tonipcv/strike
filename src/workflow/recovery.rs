@@ -51,6 +51,22 @@ impl RecoveryManager {
     }
     
     pub async fn ensure_tables(&self) -> Result<()> {
+        // Ensure checkpoints table exists (used by validate_state_consistency)
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS run_checkpoints (
+                id TEXT PRIMARY KEY,
+                run_id TEXT NOT NULL,
+                phase TEXT NOT NULL,
+                state_json TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                metadata TEXT NOT NULL
+            )
+            "#
+        )
+        .execute(&self.pool)
+        .await?;
+
         sqlx::query(
             r#"
             CREATE TABLE IF NOT EXISTS compensating_actions (
@@ -149,7 +165,11 @@ impl RecoveryManager {
             match self.execute_single_compensation(&action).await {
                 Ok(_) => {
                     self.mark_compensation_executed(&action.id).await?;
-                    executed.push(action);
+                    // Return the action with updated status and executed_at
+                    let mut updated = action;
+                    updated.status = CompensationStatus::Executed;
+                    updated.executed_at = Some(Utc::now());
+                    executed.push(updated);
                 }
                 Err(e) => {
                     self.mark_compensation_failed(&action.id).await?;
@@ -412,11 +432,7 @@ mod tests {
     use tempfile::tempdir;
 
     async fn create_test_pool() -> SqlitePool {
-        let dir = tempdir().unwrap();
-        let db_path = dir.path().join("test.db");
-        let db_url = format!("sqlite:{}", db_path.display());
-        
-        let pool = SqlitePool::connect(&db_url).await.unwrap();
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
         
         sqlx::query(
             r#"
@@ -658,6 +674,23 @@ mod tests {
         let pool = create_test_pool().await;
         let manager = RecoveryManager::new(pool.clone());
         manager.ensure_tables().await.unwrap();
+        
+        // Create run_checkpoints table needed by validate_state_consistency
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS run_checkpoints (
+                id TEXT PRIMARY KEY,
+                run_id TEXT NOT NULL,
+                phase TEXT NOT NULL,
+                state_json TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                metadata TEXT NOT NULL
+            )
+            "#
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
         
         sqlx::query("INSERT INTO run_states (id, target, environment, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)")
             .bind("test-run-8")

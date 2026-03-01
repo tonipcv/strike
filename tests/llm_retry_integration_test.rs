@@ -89,7 +89,7 @@ async fn test_retry_config_custom_delays() {
         max_attempts: 3,
         initial_delay_ms: 10,
         max_delay_ms: 100,
-        backoff_multiplier: 3.0,
+        exponential_base: 3.0,
     };
     let strategy = RetryStrategy::new(config);
     let counter = Arc::new(AtomicU32::new(0));
@@ -139,7 +139,7 @@ fn test_retry_config_defaults() {
     assert_eq!(config.max_attempts, 3);
     assert_eq!(config.initial_delay_ms, 1000);
     assert_eq!(config.max_delay_ms, 8000);
-    assert_eq!(config.backoff_multiplier, 2.0);
+    assert_eq!(config.exponential_base, 2.0);
 }
 
 #[test]
@@ -148,13 +148,13 @@ fn test_retry_config_custom_values() {
         max_attempts: 10,
         initial_delay_ms: 500,
         max_delay_ms: 16000,
-        backoff_multiplier: 1.5,
+        exponential_base: 1.5,
     };
     
     assert_eq!(config.max_attempts, 10);
     assert_eq!(config.initial_delay_ms, 500);
     assert_eq!(config.max_delay_ms, 16000);
-    assert_eq!(config.backoff_multiplier, 1.5);
+    assert_eq!(config.exponential_base, 1.5);
 }
 
 #[tokio::test]

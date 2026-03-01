@@ -4,13 +4,11 @@ use std::sync::Arc;
 use tokio::sync::Semaphore;
 use uuid::Uuid;
 
-#[cfg(not(test))]
 use crate::llm::{
     provider::{LlmPrompt, LlmResponse, TaskClass},
     prompt::{EndpointInfo, PromptTemplate},
     router::LlmRouter,
 };
-#[cfg(not(test))]
 use crate::models::vuln_class::VulnClass;
 
 
@@ -196,6 +194,13 @@ impl HypothesisAgent {
         });
         
         hypotheses
+    }
+    
+    pub fn chunk_hypotheses(&self, hypotheses: Vec<Hypothesis>) -> Vec<Vec<Hypothesis>> {
+        hypotheses
+            .chunks(self.batch_size)
+            .map(|c| c.to_vec())
+            .collect()
     }
     
     fn calculate_priority_score(&self, hypothesis: &Hypothesis) -> f32 {

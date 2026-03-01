@@ -2,13 +2,12 @@ use strike_security::agents::auth_agent::{AuthAgent, AuthCredentials, AuthResult
 
 #[tokio::test]
 async fn test_auth_agent_creation() {
-    let agent = AuthAgent::new().await;
-    assert!(agent.is_ok());
+    let _agent = AuthAgent::new();
 }
 
 #[tokio::test]
 async fn test_basic_auth_structure() {
-    let mut agent = AuthAgent::new().await.unwrap();
+    let mut agent = AuthAgent::new();
     
     let creds = AuthCredentials::Basic {
         username: "test".to_string(),
@@ -23,7 +22,7 @@ async fn test_basic_auth_structure() {
 
 #[tokio::test]
 async fn test_bearer_auth_structure() {
-    let mut agent = AuthAgent::new().await.unwrap();
+    let mut agent = AuthAgent::new();
     
     let creds = AuthCredentials::Bearer {
         token: "test_token_123".to_string(),
@@ -39,7 +38,7 @@ async fn test_bearer_auth_structure() {
 
 #[tokio::test]
 async fn test_api_key_auth_structure() {
-    let mut agent = AuthAgent::new().await.unwrap();
+    let mut agent = AuthAgent::new();
     
     let creds = AuthCredentials::ApiKey {
         key: "api_key_123".to_string(),
@@ -71,7 +70,7 @@ fn test_auth_result_structure() {
 
 #[tokio::test]
 async fn test_oauth2_auth_structure() {
-    let mut agent = AuthAgent::new().await.unwrap();
+    let mut agent = AuthAgent::new();
     
     let creds = AuthCredentials::OAuth2 {
         client_id: "client123".to_string(),
@@ -88,7 +87,7 @@ async fn test_oauth2_auth_structure() {
 
 #[tokio::test]
 async fn test_cookie_extraction() {
-    let mut agent = AuthAgent::new().await.unwrap();
+    let mut agent = AuthAgent::new();
     
     let creds = AuthCredentials::Basic {
         username: "user".to_string(),

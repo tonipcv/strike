@@ -1,14 +1,9 @@
 use strike_security::workflow::recovery::{RecoveryManager, CompensationStatus};
 use sqlx::SqlitePool;
-use tempfile::tempdir;
 use chrono::Utc;
 
 async fn create_test_pool() -> SqlitePool {
-    let dir = tempdir().unwrap();
-    let db_path = dir.path().join("test.db");
-    let db_url = format!("sqlite:{}", db_path.display());
-    
-    let pool = SqlitePool::connect(&db_url).await.unwrap();
+    let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
     
     sqlx::query(
         r#"

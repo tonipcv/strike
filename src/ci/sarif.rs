@@ -67,6 +67,7 @@ pub struct SarifRegion {
     pub start_line: Option<u32>,
 }
 
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct SarifGenerator;
 
 impl SarifGenerator {

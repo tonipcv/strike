@@ -2,13 +2,13 @@ use strike_security::agents::validation_agent::ValidationAgent;
 
 #[tokio::test]
 async fn test_validation_agent_creation() {
-    let agent = ValidationAgent::new().await;
+    let agent = ValidationAgent::new();
     assert!(agent.is_ok());
 }
 
 #[tokio::test]
 async fn test_sql_injection_detection_with_diffing() {
-    let agent = ValidationAgent::new().await.unwrap();
+    let agent = ValidationAgent::new().unwrap();
     
     let result = agent.validate_finding("https://httpbin.org/post", "SQL Injection").await;
     
@@ -17,7 +17,7 @@ async fn test_sql_injection_detection_with_diffing() {
 
 #[tokio::test]
 async fn test_xss_detection_context_aware() {
-    let agent = ValidationAgent::new().await.unwrap();
+    let agent = ValidationAgent::new().unwrap();
     
     let result = agent.validate_finding("https://httpbin.org/get", "XSS").await;
     
@@ -26,7 +26,7 @@ async fn test_xss_detection_context_aware() {
 
 #[tokio::test]
 async fn test_ssrf_detection_with_metadata_check() {
-    let agent = ValidationAgent::new().await.unwrap();
+    let agent = ValidationAgent::new().unwrap();
     
     let result = agent.validate_finding("https://httpbin.org/post", "SSRF").await;
     
@@ -35,7 +35,7 @@ async fn test_ssrf_detection_with_metadata_check() {
 
 #[tokio::test]
 async fn test_idor_detection_with_id_manipulation() {
-    let agent = ValidationAgent::new().await.unwrap();
+    let agent = ValidationAgent::new().unwrap();
     
     let result = agent.validate_finding("https://httpbin.org/users/1", "IDOR").await;
     
@@ -44,7 +44,7 @@ async fn test_idor_detection_with_id_manipulation() {
 
 #[tokio::test]
 async fn test_validation_reduces_false_positives() {
-    let agent = ValidationAgent::new().await.unwrap();
+    let agent = ValidationAgent::new().unwrap();
     
     // Test with a safe endpoint
     let result = agent.validate_finding("https://httpbin.org/status/200", "SQL Injection").await;
@@ -57,7 +57,7 @@ async fn test_validation_reduces_false_positives() {
 
 #[tokio::test]
 async fn test_time_based_sql_detection() {
-    let agent = ValidationAgent::new().await.unwrap();
+    let agent = ValidationAgent::new().unwrap();
     
     // This would test time-based SQLi detection
     let result = agent.validate_finding("https://httpbin.org/delay/1", "SQL Injection").await;
@@ -67,7 +67,7 @@ async fn test_time_based_sql_detection() {
 
 #[tokio::test]
 async fn test_response_diffing_mechanism() {
-    let agent = ValidationAgent::new().await.unwrap();
+    let agent = ValidationAgent::new().unwrap();
     
     // Test that response diffing works
     let result = agent.validate_finding("https://httpbin.org/post", "SQL Injection").await;
@@ -80,7 +80,7 @@ async fn test_response_diffing_mechanism() {
 
 #[tokio::test]
 async fn test_xss_in_different_contexts() {
-    let agent = ValidationAgent::new().await.unwrap();
+    let agent = ValidationAgent::new().unwrap();
     
     // Test XSS detection in various HTML contexts
     let contexts = vec![
@@ -96,7 +96,7 @@ async fn test_xss_in_different_contexts() {
 
 #[tokio::test]
 async fn test_ssrf_internal_service_detection() {
-    let agent = ValidationAgent::new().await.unwrap();
+    let agent = ValidationAgent::new().unwrap();
     
     let result = agent.validate_finding("https://httpbin.org/post", "SSRF").await;
     
@@ -105,7 +105,7 @@ async fn test_ssrf_internal_service_detection() {
 
 #[tokio::test]
 async fn test_idor_authorization_bypass() {
-    let agent = ValidationAgent::new().await.unwrap();
+    let agent = ValidationAgent::new().unwrap();
     
     let result = agent.validate_finding("https://httpbin.org/users/100", "IDOR").await;
     

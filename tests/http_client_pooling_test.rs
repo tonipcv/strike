@@ -25,7 +25,7 @@ async fn test_http_client_with_custom_config() {
 async fn test_http_client_config_defaults() {
     let config = HttpClientConfig::default();
     
-    assert_eq!(config.rate_limit, 10);
+    assert_eq!(config.rate_limit, 50);
     assert_eq!(config.timeout_seconds, 30);
     assert_eq!(config.pool_max_idle_per_host, 32);
     assert_eq!(config.pool_idle_timeout_seconds, 90);

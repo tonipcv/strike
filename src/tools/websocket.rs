@@ -4,25 +4,43 @@ use std::time::Duration;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WebSocketConfig {
-    pub url: String,
-    pub timeout: Duration,
+    pub timeout_seconds: u64,
     pub max_message_size: usize,
+    pub auto_reconnect: bool,
+    pub ping_interval_seconds: u64,
 }
 
 impl Default for WebSocketConfig {
     fn default() -> Self {
         Self {
-            url: String::new(),
-            timeout: Duration::from_secs(30),
+            timeout_seconds: 30,
             max_message_size: 1024 * 1024, // 1MB
+            auto_reconnect: true,
+            ping_interval_seconds: 30,
         }
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WebSocketMessage {
-    pub payload: String,
-    pub message_type: MessageType,
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum WebSocketMessage {
+    Text(String),
+    Binary(Vec<u8>),
+    Ping,
+    Pong,
+    Close { code: u16, reason: String },
+}
+
+impl WebSocketMessage {
+    pub const NORMAL_CLOSURE: u16 = 1000;
+    pub const GOING_AWAY: u16 = 1001;
+    pub const PROTOCOL_ERROR: u16 = 1002;
+    pub const UNSUPPORTED_DATA: u16 = 1003;
+
+    pub fn text<S: Into<String>>(s: S) -> Self { Self::Text(s.into()) }
+    pub fn binary(b: Vec<u8>) -> Self { Self::Binary(b) }
+    pub fn ping() -> Self { Self::Ping }
+    pub fn pong() -> Self { Self::Pong }
+    pub fn close<S: Into<String>>(code: u16, reason: S) -> Self { Self::Close { code, reason: reason.into() } }
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]

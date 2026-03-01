@@ -11,6 +11,54 @@ pub struct TrafficRecord {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReplayResult {
+    pub request: RecordedRequest,
+    pub response_status: u16,
+    pub response_body: String,
+    pub response_time_ms: u64,
+    pub mutation_applied: Option<String>,
+}
+
+// Public request type used by tests
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HttpRequest {
+    pub method: String,
+    pub url: String,
+    pub headers: Vec<(String, String)>,
+    pub body: Option<String>,
+}
+
+impl From<HttpRequest> for RecordedRequest {
+    fn from(value: HttpRequest) -> Self {
+        let mut headers = HashMap::new();
+        for (k, v) in value.headers {
+            headers.insert(k, v);
+        }
+        RecordedRequest {
+            method: value.method,
+            url: value.url,
+            headers,
+            body: value.body,
+        }
+    }
+}
+
+impl From<&HttpRequest> for RecordedRequest {
+    fn from(value: &HttpRequest) -> Self {
+        let mut headers = HashMap::new();
+        for (k, v) in &value.headers {
+            headers.insert(k.clone(), v.clone());
+        }
+        RecordedRequest {
+            method: value.method.clone(),
+            url: value.url.clone(),
+            headers,
+            body: value.body.clone(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RecordedRequest {
     pub method: String,
     pub url: String,
@@ -36,6 +84,8 @@ pub struct ResponseDiff {
 
 #[derive(Debug, Clone)]
 pub enum MutationStrategy {
+    ParameterFuzzing,
+    HeaderInjection,
     IdorIncrement,
     IdorDecrement,
     IdorUuidSubstitution,
@@ -45,6 +95,7 @@ pub enum MutationStrategy {
     SsrfInternal,
     AuthBypass,
     MassAssignment,
+    MethodSwapping,
 }
 
 pub struct TrafficReplayer {
@@ -52,10 +103,8 @@ pub struct TrafficReplayer {
 }
 
 impl TrafficReplayer {
-    pub fn new() -> Self {
-        Self {
-            records: Vec::new(),
-        }
+    pub async fn new() -> Result<Self> {
+        Ok(Self { records: Vec::new() })
     }
     
     pub fn record(&mut self, request: RecordedRequest, response: RecordedResponse) -> String {
@@ -80,7 +129,7 @@ impl TrafficReplayer {
         Ok(record.response.clone())
     }
     
-    pub async fn replay_with_mutations(&self, request: &RecordedRequest, strategy: MutationStrategy) -> Result<Vec<ReplayResult>> {
+    pub async fn replay_with_mutations(&self, request: &HttpRequest, strategy: MutationStrategy) -> Result<Vec<ReplayResult>> {
         let mut results = Vec::new();
         
         match strategy {
@@ -94,15 +143,16 @@ impl TrafficReplayer {
                 for payload in payloads {
                     let mut mutated = request.clone();
                     mutated.body = Some(payload.to_string());
-                    
-                    let response = reqwest::Client::new()
-                        .post(&mutated.url)
+                    let client = reqwest::Client::new();
+                    let mut reqb = client.post(&mutated.url);
+                    for (k, v) in &mutated.headers { reqb = reqb.header(k, v); }
+                    let response = reqb
                         .body(payload)
                         .send()
                         .await?;
                     
                     results.push(ReplayResult {
-                        request: mutated,
+                        request: RecordedRequest::from(mutated),
                         response_status: response.status().as_u16(),
                         response_body: response.text().await?,
                         response_time_ms: 100,
@@ -119,14 +169,16 @@ impl TrafficReplayer {
                 ];
                 
                 for (header_name, header_value) in headers {
-                    let response = reqwest::Client::new()
-                        .get(&request.url)
+                    let client = reqwest::Client::new();
+                    let mut reqb = client.get(&request.url);
+                    for (k, v) in &request.headers { reqb = reqb.header(k, v); }
+                    let response = reqb
                         .header(header_name, header_value)
                         .send()
                         .await?;
                     
                     results.push(ReplayResult {
-                        request: request.clone(),
+                        request: RecordedRequest::from(request.clone()),
                         response_status: response.status().as_u16(),
                         response_body: response.text().await?,
                         response_time_ms: 100,
@@ -139,18 +191,26 @@ impl TrafficReplayer {
                 let methods = vec!["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"];
                 
                 for method in methods {
-                    let response = match method {
-                        "GET" => reqwest::Client::new().get(&request.url).send().await?,
-                        "POST" => reqwest::Client::new().post(&request.url).send().await?,
-                        "PUT" => reqwest::Client::new().put(&request.url).send().await?,
-                        "DELETE" => reqwest::Client::new().delete(&request.url).send().await?,
-                        _ => continue,
+                    let client = reqwest::Client::new();
+                    let mut reqb = match method {
+                        "GET" => client.get(&request.url),
+                        "POST" => client.post(&request.url),
+                        "PUT" => client.put(&request.url),
+                        "DELETE" => client.delete(&request.url),
+                        "PATCH" => client.patch(&request.url),
+                        "OPTIONS" => client.request(reqwest::Method::OPTIONS, &request.url),
+                        _ => client.get(&request.url),
                     };
+                    for (k, v) in &request.headers { reqb = reqb.header(k, v); }
+                    let response = reqb.send().await?;
+                    let status = response.status().as_u16();
+                    let body = response.text().await.unwrap_or_default();
+                    let body = if body.is_empty() { format!("HTTP {}", status) } else { body };
                     
                     results.push(ReplayResult {
-                        request: request.clone(),
-                        response_status: response.status().as_u16(),
-                        response_body: response.text().await?,
+                        request: RecordedRequest::from(request.clone()),
+                        response_status: status,
+                        response_body: body,
                         response_time_ms: 100,
                         mutation_applied: Some(format!("Method: {}", method)),
                     });
@@ -165,14 +225,16 @@ impl TrafficReplayer {
                 ];
                 
                 for (header_name, header_value) in bypass_headers {
-                    let response = reqwest::Client::new()
-                        .get(&request.url)
+                    let client = reqwest::Client::new();
+                    let mut reqb = client.get(&request.url);
+                    for (k, v) in &request.headers { reqb = reqb.header(k, v); }
+                    let response = reqb
                         .header(header_name, header_value)
                         .send()
                         .await?;
                     
                     results.push(ReplayResult {
-                        request: request.clone(),
+                        request: RecordedRequest::from(request.clone()),
                         response_status: response.status().as_u16(),
                         response_body: response.text().await?,
                         response_time_ms: 100,
@@ -323,7 +385,7 @@ impl TrafficReplayer {
 
 impl Default for TrafficReplayer {
     fn default() -> Self {
-        Self::new()
+        Self { records: Vec::new() }
     }
 }
 
@@ -331,15 +393,15 @@ impl Default for TrafficReplayer {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_traffic_replayer_creation() {
-        let replayer = TrafficReplayer::new();
+    #[tokio::test]
+    async fn test_traffic_replayer_creation() {
+        let replayer = TrafficReplayer::new().await.unwrap();
         assert_eq!(replayer.records.len(), 0);
     }
     
-    #[test]
-    fn test_record_traffic() {
-        let mut replayer = TrafficReplayer::new();
+    #[tokio::test]
+    async fn test_record_traffic() {
+        let mut replayer = TrafficReplayer::new().await.unwrap();
         
         let request = RecordedRequest {
             method: "GET".to_string(),
@@ -360,9 +422,9 @@ mod tests {
         assert_eq!(replayer.records.len(), 1);
     }
     
-    #[test]
-    fn test_mutate_param_idor() {
-        let replayer = TrafficReplayer::new();
+    #[tokio::test]
+    async fn test_mutate_param_idor() {
+        let replayer = TrafficReplayer::new().await.unwrap();
         let mutations = replayer.mutate_param("123", MutationStrategy::IdorIncrement);
         
         assert_eq!(mutations.len(), 5);
@@ -370,18 +432,18 @@ mod tests {
         assert!(mutations.contains(&"122".to_string()));
     }
     
-    #[test]
-    fn test_mutate_param_sqli() {
-        let replayer = TrafficReplayer::new();
+    #[tokio::test]
+    async fn test_mutate_param_sqli() {
+        let replayer = TrafficReplayer::new().await.unwrap();
         let mutations = replayer.mutate_param("test", MutationStrategy::SqliClassic);
         
         assert!(!mutations.is_empty());
         assert!(mutations.iter().any(|m| m.contains("OR")));
     }
     
-    #[test]
-    fn test_diff_responses() {
-        let replayer = TrafficReplayer::new();
+    #[tokio::test]
+    async fn test_diff_responses() {
+        let replayer = TrafficReplayer::new().await.unwrap();
         
         let baseline = RecordedResponse {
             status_code: 401,
@@ -402,9 +464,9 @@ mod tests {
         assert!(diff.auth_bypass_detected);
     }
     
-    #[test]
-    fn test_export_to_curl() {
-        let mut replayer = TrafficReplayer::new();
+    #[tokio::test]
+    async fn test_export_to_curl() {
+        let mut replayer = TrafficReplayer::new().await.unwrap();
         
         let mut headers = HashMap::new();
         headers.insert("Authorization".to_string(), "Bearer token".to_string());

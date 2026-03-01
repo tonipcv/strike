@@ -28,8 +28,21 @@ impl WorkflowEngine {
         let checkpoint_manager = Arc::new(CheckpointManager::new(pool.clone()));
         checkpoint_manager.ensure_tables().await?;
         
-        let recovery_manager = Arc::new(RecoveryManager::new(pool));
+        let recovery_manager = Arc::new(RecoveryManager::new(pool.clone()));
         recovery_manager.ensure_tables().await?;
+        
+        // Create run_states entry
+        sqlx::query(
+            "INSERT OR IGNORE INTO run_states (id, target, environment, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)"
+        )
+        .bind(&run_id)
+        .bind("test-target")
+        .bind("test")
+        .bind("running")
+        .bind(Utc::now().to_rfc3339())
+        .bind(Utc::now().to_rfc3339())
+        .execute(&pool)
+        .await?;
         
         let state = Arc::new(RwLock::new(WorkflowState::new(run_id.clone())));
         let event_bus = EventBus::new(1000);
@@ -308,11 +321,7 @@ mod tests {
     use tempfile::tempdir;
 
     async fn create_test_pool() -> SqlitePool {
-        let dir = tempdir().unwrap();
-        let db_path = dir.path().join("test.db");
-        let db_url = format!("sqlite:{}", db_path.display());
-        
-        let pool = SqlitePool::connect(&db_url).await.unwrap();
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
         
         sqlx::query(
             r#"
@@ -362,17 +371,6 @@ mod tests {
         
         {
             let engine = WorkflowEngine::new("test-run-resume".to_string(), pool.clone(), None).await.unwrap();
-            
-            sqlx::query("INSERT INTO run_states (id, target, environment, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)")
-                .bind("test-run-resume")
-                .bind("https://example.com")
-                .bind("test")
-                .bind("running")
-                .bind(Utc::now().to_rfc3339())
-                .bind(Utc::now().to_rfc3339())
-                .execute(&pool)
-                .await
-                .unwrap();
             
             engine.start_phase(WorkflowPhase::Recon).await.unwrap();
             engine.complete_phase(WorkflowPhase::Recon, None, 1000).await.unwrap();

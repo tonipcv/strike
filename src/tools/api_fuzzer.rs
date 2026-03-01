@@ -12,6 +12,7 @@ pub struct FuzzRequest {
     pub mutation_type: String,
 }
 
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct ApiFuzzer;
 
 impl ApiFuzzer {

@@ -29,6 +29,7 @@ pub struct GitLabLines {
     pub begin: u32,
 }
 
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct AnnotationGenerator;
 
 impl AnnotationGenerator {

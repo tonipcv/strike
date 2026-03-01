@@ -15,6 +15,7 @@ pub struct ExpectedVuln {
     pub description: String,
 }
 
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct TargetRegistry;
 
 impl TargetRegistry {

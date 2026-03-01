@@ -2,14 +2,12 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-#[cfg(not(test))]
 use crate::llm::{
     provider::{LlmPrompt, LlmResponse, TaskClass},
     prompt::{FindingContext, PromptTemplate},
     router::LlmRouter,
 };
-#[cfg(not(test))]
-use crate::models::finding::Finding;
+use crate::models::Finding;
 
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -203,7 +201,8 @@ impl RootCauseAgent {
 mod tests {
     use super::*;
     use crate::llm::router::RouterConfig;
-    use crate::models::evidence::{ProofOfConcept, Target};
+    use crate::models::evidence::ProofOfConcept;
+    use crate::models::Target;
 
     #[test]
     fn test_cwe_inference() {

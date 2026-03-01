@@ -11,6 +11,7 @@ pub struct BenchmarkMetrics {
     pub detection_rate: f32,
 }
 
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct MetricsCalculator;
 
 impl MetricsCalculator {
