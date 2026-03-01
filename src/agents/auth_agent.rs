@@ -48,7 +48,7 @@ impl AuthAgent {
                 let auth_value = general_purpose::STANDARD.encode(format!("{}:{}", username, password));
                 let auth_header = format!("Basic {}", auth_value);
                 
-                let response = self.http_client.get(target).header("Authorization", auth_header).send().await?;
+                let response = self.http_client.get(target).await?;
                 
                 let mut cookies = Vec::new();
                 let mut headers = Vec::new();
