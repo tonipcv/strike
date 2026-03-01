@@ -1,9 +1,11 @@
 use anyhow::Result;
-use crate::tools::HttpClient;
+use crate::tools::{HttpClient, DnsResolver, PortScanner};
 use url::Url;
 
 pub struct ReconAgent {
     http_client: HttpClient,
+    dns_resolver: DnsResolver,
+    port_scanner: PortScanner,
 }
 
 #[derive(Debug, Clone)]
@@ -18,10 +20,12 @@ pub struct ReconResult {
 
 impl ReconAgent {
     pub async fn new() -> Result<Self> {
+        let dns_resolver = DnsResolver::new();
+        let port_scanner = PortScanner::new();
         Ok(Self {
             http_client: HttpClient::new(50, 30)?,
-            dns_resolver: DnsResolver::new(),
-            port_scanner: PortScanner::new(),
+            dns_resolver,
+            port_scanner,
         })
     }
 
