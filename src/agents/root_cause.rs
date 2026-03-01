@@ -86,7 +86,7 @@ impl RootCauseAgent {
         
         let prompt_text = self.prompt_template.render_root_cause_analysis(
             &finding_context,
-            code_context,
+            code_context.as_deref(),
         )?;
         
         let prompt = LlmPrompt::new(prompt_text)
