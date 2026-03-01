@@ -30,13 +30,14 @@ pub struct AuthResult {
 }
 
 pub struct AuthAgent {
+    http_client: HttpClient,
     sessions: HashMap<String, AuthSession>,
-    http_client: reqwest::Client,
 }
 
 impl AuthAgent {
     pub fn new() -> Self {
         Self {
+            http_client: HttpClient::new(),
             sessions: HashMap::new(),
             http_client: reqwest::Client::new(),
         }
