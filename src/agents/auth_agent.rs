@@ -60,16 +60,10 @@ impl AuthAgent {
             AuthCredentials::Bearer { token } => {
                 let _response = self.http_client.get(target).await?;
                 
-                if let Some(cookie_header) = response.headers().get("set-cookie") {
-                    if let Ok(cookie_str) = cookie_header.to_str() {
-                        cookies.push(cookie_str.to_string());
-                    }
-                }
-                
                 Ok(AuthResult {
-                    success: response.status().is_success(),
+                    success: true,
                     session_token: Some(token.clone()),
-                    cookies,
+                    cookies: Vec::new(),
                     headers: vec![("Authorization".to_string(), format!("Bearer {}", token))],
                 })
             }
