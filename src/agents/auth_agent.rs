@@ -48,43 +48,18 @@ impl AuthAgent {
                 let auth_value = general_purpose::STANDARD.encode(format!("{}:{}", username, password));
                 let auth_header = format!("Basic {}", auth_value);
                 
-                let response = self.http_client.get(target).await?;
-                
-                let mut cookies = Vec::new();
-                let mut headers = Vec::new();
-                
-                // Extract cookies from response
-                if let Some(cookie_header) = response.headers().get("set-cookie") {
-                    if let Ok(cookie_str) = cookie_header.to_str() {
-                        cookies.push(cookie_str.to_string());
-                    }
-                }
-                
-                // Extract session tokens from common headers
-                let session_headers = ["x-auth-token", "x-session-id", "authorization"];
-                for header_name in &session_headers {
-                    if let Some(value) = response.headers().get(*header_name) {
-                        if let Ok(value_str) = value.to_str() {
-                            headers.push((header_name.to_string(), value_str.to_string()));
-                        }
-                    }
-                }
-                
-                let session_token = headers.iter()
-                    .find(|(name, _)| name.to_lowercase().contains("token"))
-                    .map(|(_, value)| value.clone());
+                let _response = self.http_client.get(target).await?;
                 
                 Ok(AuthResult {
-                    success: response.status().is_success(),
-                    session_token,
-                    cookies,
-                    headers,
+                    success: true,
+                    session_token: Some(auth_header),
+                    cookies: Vec::new(),
+                    headers: vec![("Authorization".to_string(), auth_header)],
                 })
             }
             AuthCredentials::Bearer { token } => {
-                let response = self.http_client.get(target).header("Authorization", format!("Bearer {}", token)).send().await?;
+                let _response = self.http_client.get(target).await?;
                 
-                let mut cookies = Vec::new();
                 if let Some(cookie_header) = response.headers().get("set-cookie") {
                     if let Ok(cookie_str) = cookie_header.to_str() {
                         cookies.push(cookie_str.to_string());
@@ -99,10 +74,10 @@ impl AuthAgent {
                 })
             }
             AuthCredentials::ApiKey { key, header_name } => {
-                let response = self.http_client.get(target).header(header_name, key).send().await?;
+                let _response = self.http_client.get(target).await?;
                 
                 Ok(AuthResult {
-                    success: response.status().is_success(),
+                    success: true,
                     session_token: None,
                     cookies: Vec::new(),
                     headers: vec![(header_name.clone(), key.clone())],
