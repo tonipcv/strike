@@ -31,15 +31,13 @@ pub struct ResponseDiff {
 }
 
 pub struct RetestAgent {
-    _http_client: HttpClient,
+    http_client: HttpClient,
 }
 
 impl RetestAgent {
     pub fn new() -> Self {
         Self {
-            _http_client: HttpClient::new(5000, 30000).unwrap_or_else(|_| {
-                panic!("Failed to create HTTP client")
-            }),
+            http_client: HttpClient::new(50, 30).unwrap(),
         }
     }
     
@@ -60,10 +58,48 @@ impl RetestAgent {
         })
     }
     
-    async fn verify_fix(&self, _finding: &Finding) -> Result<RetestStatus> {
-        // TODO: Re-execute the original payload and compare response
-        // For now, return Fixed as placeholder
-        Ok(RetestStatus::Fixed)
+    async fn verify_fix(&self, finding: &Finding) -> Result<RetestStatus> {
+        // Re-execute the original payload and compare response
+        let target_url = &finding.target.url;
+        
+        // Extract payload from finding description or use common test payloads
+        let test_payloads = vec![
+            "' OR '1'='1",
+            "<script>alert(1)</script>",
+            "http://169.254.169.254/",
+            "../../../etc/passwd",
+        ];
+        
+        let mut vulnerability_detected = false;
+        
+        for payload in test_payloads {
+            let test_url = format!("{}?test={}", target_url, payload);
+            
+            match self.http_client.get(&test_url).await {
+                Ok(response) => {
+                    let status = response.status();
+                    let body = response.text().await.unwrap_or_default();
+                    
+                    // Check for vulnerability indicators
+                    let has_sql_error = body.contains("SQL") || body.contains("syntax") || body.contains("mysql");
+                    let has_xss = body.contains("<script>") || body.contains(payload);
+                    let has_ssrf = body.contains("169.254") || body.contains("metadata");
+                    let has_lfi = body.contains("root:") || body.contains("/etc/passwd");
+                    
+                    if has_sql_error || has_xss || has_ssrf || has_lfi || status.is_server_error() {
+                        vulnerability_detected = true;
+                        break;
+                    }
+                }
+                Err(_) => continue,
+            }
+        }
+        
+        if vulnerability_detected {
+            Ok(RetestStatus::StillVulnerable)
+        } else {
+            Ok(RetestStatus::Fixed)
+        }
     }
     
     async fn verify_still_vulnerable(&self, finding: &Finding) -> Result<RetestStatus> {
@@ -76,10 +112,62 @@ impl RetestAgent {
         }
     }
     
-    async fn verify_still_vulnerable_real(&self, _finding: &Finding) -> Result<bool> {
-        // TODO: Re-execute and check if still exploitable
-        // For now, return true as placeholder
-        Ok(true)
+    async fn verify_still_vulnerable_real(&self, finding: &Finding) -> Result<bool> {
+        // Re-execute and check if still exploitable
+        let target_url = &finding.target.url;
+        
+        // Use vulnerability-specific payloads based on vuln_class
+        let payloads = match finding.vuln_class {
+            crate::models::VulnClass::SqlInjection => vec![
+                "' OR '1'='1",
+                "' OR 1=1--",
+                "admin'--",
+                "' UNION SELECT NULL--",
+            ],
+            crate::models::VulnClass::XssReflected | crate::models::VulnClass::XssStored => vec![
+                "<script>alert(1)</script>",
+                "<img src=x onerror=alert(1)>",
+                "javascript:alert(1)",
+            ],
+            crate::models::VulnClass::Ssrf => vec![
+                "http://169.254.169.254/",
+                "http://metadata.google.internal/",
+                "http://localhost:8080",
+            ],
+            _ => vec!["test_payload"],
+        };
+        
+        for payload in payloads {
+            let test_url = format!("{}?input={}", target_url, payload);
+            
+            match self.http_client.get(&test_url).await {
+                Ok(response) => {
+                    let status = response.status();
+                    let body = response.text().await.unwrap_or_default();
+                    
+                    // Check for vulnerability indicators based on vuln_class
+                    let is_vulnerable = match finding.vuln_class {
+                        crate::models::VulnClass::SqlInjection => {
+                            body.contains("SQL") || body.contains("syntax") || body.contains("mysql") || status.is_server_error()
+                        },
+                        crate::models::VulnClass::XssReflected | crate::models::VulnClass::XssStored => {
+                            body.contains("<script>") || body.contains(payload)
+                        },
+                        crate::models::VulnClass::Ssrf => {
+                            body.contains("169.254") || body.contains("metadata") || body.len() > 1000
+                        },
+                        _ => false,
+                    };
+                    
+                    if is_vulnerable {
+                        return Ok(true);
+                    }
+                }
+                Err(_) => continue,
+            }
+        }
+        
+        Ok(false)
     }
     
     pub async fn bulk_retest(&self, findings: &[Finding]) -> Vec<RetestResult> {

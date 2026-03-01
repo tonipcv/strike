@@ -20,6 +20,8 @@ impl ReconAgent {
     pub async fn new() -> Result<Self> {
         Ok(Self {
             http_client: HttpClient::new(50, 30)?,
+            dns_resolver: DnsResolver::new(),
+            port_scanner: PortScanner::new(),
         })
     }
 
@@ -27,9 +29,17 @@ impl ReconAgent {
         let url = Url::parse(target)?;
         let domain = url.host_str().ok_or_else(|| anyhow::anyhow!("Invalid target URL"))?;
 
-        let ip_addresses: Vec<String> = vec![];
+        // Resolve IP addresses using integrated DNS resolver
+        let ip_addresses = self.dns_resolver.resolve(domain).await.unwrap_or_default();
         
-        let mut open_ports = Vec::new();
+        // Scan ports on first IP if available using integrated port scanner
+        let open_ports = if !ip_addresses.is_empty() {
+            self.port_scanner.scan(&ip_addresses[0], &[80, 443, 8080, 8443, 3000, 5000, 22, 21])
+                .await
+                .unwrap_or_default()
+        } else {
+            Vec::new()
+        };
 
         let technologies = self.detect_technologies(target).await?;
         let endpoints = self.discover_endpoints(target).await?;

@@ -1,5 +1,7 @@
-use anyhow::Result;
+use anyhow::{Result, Context};
+use crate::tools::HttpClient;
 use std::collections::HashMap;
+use serde_json::from_str;
 use serde::{Deserialize, Serialize};
 use base64::{Engine as _, engine::general_purpose};
 
@@ -108,22 +110,19 @@ impl AuthAgent {
             }
             AuthCredentials::OAuth2 { client_id, client_secret, token_url, scope } => {
                 // Implement OAuth2 client credentials flow
-                let token_response = self.http_client.post(token_url)
-                    .header("Content-Type", "application/x-www-form-urlencoded")
-                    .body(format!("grant_type=client_credentials&client_id={}&client_secret={}", client_id, client_secret))
-                    .send()
-                    .await
-                    .map_err(|e| anyhow::anyhow!("OAuth2 token request failed: {}", e))?;
+                let body = format!("grant_type=client_credentials&client_id={}&client_secret={}", client_id, client_secret);
+                let token_response = self.http_client.post(token_url, Some(body)).await?;
                 
-                let token = if token_response.status().is_success() {
-                    "oauth_token_placeholder".to_string()
-                } else {
-                    anyhow::bail!("OAuth2 authentication failed")
-                };
+                let token_response_text = token_response.text().await?;
+                let token_response_json: serde_json::Value = from_str(&token_response_text)?;
+                let token = token_response_json["access_token"]
+                    .as_str()
+                    .ok_or_else(|| anyhow::anyhow!("No access_token in OAuth2 response"))?
+                    .to_string();
                 
                 Ok(AuthResult {
                     success: true,
-                    session_token: Some(token.clone()),
+                    session_token: Some(token),
                     cookies: Vec::new(),
                     headers: vec![("Authorization".to_string(), format!("Bearer {}", token))],
                 })
