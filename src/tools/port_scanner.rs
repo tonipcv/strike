@@ -9,8 +9,17 @@ pub struct PortScanner {
 }
 
 impl PortScanner {
-    pub fn new(timeout_ms: u64) -> Self {
+    pub fn new() -> Self {
+        Self { timeout_ms: 1000 }
+    }
+    
+    pub fn with_timeout(timeout_ms: u64) -> Self {
         Self { timeout_ms }
+    }
+    
+    pub async fn scan(&self, ip_str: &str, ports: &[u16]) -> Result<Vec<u16>> {
+        let ip: IpAddr = ip_str.parse()?;
+        self.scan_ports(ip, ports.to_vec()).await
     }
 
     pub async fn scan_port(&self, ip: IpAddr, port: u16) -> bool {

@@ -7,13 +7,13 @@ pub struct DnsResolver {
 }
 
 impl DnsResolver {
-    pub async fn new() -> Result<Self> {
+    pub fn new() -> Self {
         let resolver = TokioAsyncResolver::tokio(
             ResolverConfig::default(),
             ResolverOpts::default(),
         );
 
-        Ok(Self { resolver })
+        Self { resolver }
     }
 
     pub async fn resolve(&self, domain: &str) -> Result<Vec<String>> {
