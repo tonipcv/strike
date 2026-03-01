@@ -91,7 +91,7 @@ impl AuthAgent {
                 
                 Ok(AuthResult {
                     success: true,
-                    session_token: Some(token),
+                    session_token: Some(token.clone()),
                     cookies: Vec::new(),
                     headers: vec![("Authorization".to_string(), format!("Bearer {}", token))],
                 })
