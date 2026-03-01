@@ -111,7 +111,7 @@ impl AuthAgent {
             AuthCredentials::OAuth2 { client_id, client_secret, token_url, scope } => {
                 // Implement OAuth2 client credentials flow
                 let body = format!("grant_type=client_credentials&client_id={}&client_secret={}", client_id, client_secret);
-                let token_response = self.http_client.post(token_url, Some(body)).await?;
+                let token_response = self.http_client.post(&token_url, Some(body)).await?;
                 
                 let token_response_text = token_response.text().await?;
                 let token_response_json: serde_json::Value = from_str(&token_response_text)?;
