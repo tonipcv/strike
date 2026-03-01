@@ -11,14 +11,6 @@ use crate::llm::{
 #[cfg(not(test))]
 use crate::models::finding::Finding;
 
-#[cfg(test)]
-use strike_security::llm::{
-    provider::{LlmPrompt, LlmResponse, TaskClass},
-    prompt::{FindingContext, PromptTemplate},
-    router::LlmRouter,
-};
-#[cfg(test)]
-use strike_security::models::finding::Finding;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RootCauseAnalysis {
@@ -181,8 +173,8 @@ impl RootCauseAgent {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use strike_security::llm::router::RouterConfig;
-    use strike_security::models::evidence::{ProofOfConcept, Target};
+    use crate::llm::router::RouterConfig;
+    use crate::models::evidence::{ProofOfConcept, Target};
 
     #[test]
     fn test_cwe_inference() {

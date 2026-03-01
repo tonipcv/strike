@@ -1,5 +1,8 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
+
+#[cfg(feature = "browser")]
+use chromiumoxide::{Browser, BrowserConfig};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PageSnapshot {
@@ -29,16 +32,81 @@ pub struct HttpRequest {
 
 pub struct BrowserDriver {
     headless: bool,
+    #[cfg(feature = "browser")]
+    browser: Option<Browser>,
 }
 
 impl BrowserDriver {
-    pub fn new(headless: bool) -> Result<Self> {
+    #[cfg(feature = "browser")]
+    pub async fn new(headless: bool) -> Result<Self> {
+        let config = BrowserConfig::builder()
+            .with_head()
+            .build()
+            .context("Failed to build browser config")?;
+        
+        let (browser, mut handler) = Browser::launch(config)
+            .await
+            .context("Failed to launch browser")?;
+        
+        tokio::spawn(async move {
+            while let Some(h) = handler.next().await {
+                if h.is_err() {
+                    break;
+                }
+            }
+        });
+        
+        Ok(Self {
+            headless,
+            browser: Some(browser),
+        })
+    }
+    
+    #[cfg(not(feature = "browser"))]
+    pub async fn new(headless: bool) -> Result<Self> {
         Ok(Self { headless })
     }
     
-    pub async fn navigate(&self, _url: &str) -> Result<PageSnapshot> {
+    #[cfg(feature = "browser")]
+    pub async fn navigate(&self, url: &str) -> Result<PageSnapshot> {
+        if let Some(browser) = &self.browser {
+            let page = browser.new_page(url)
+                .await
+                .context("Failed to create new page")?;
+            
+            page.goto(url)
+                .await
+                .context("Failed to navigate to URL")?;
+            
+            let title = page.get_title()
+                .await
+                .unwrap_or_else(|_| Some("".to_string()))
+                .unwrap_or_default();
+            
+            let html = page.content()
+                .await
+                .unwrap_or_else(|_| "<html></html>".to_string());
+            
+            Ok(PageSnapshot {
+                url: url.to_string(),
+                title,
+                html,
+                cookies: vec![],
+            })
+        } else {
+            Ok(PageSnapshot {
+                url: url.to_string(),
+                title: "Page Title".to_string(),
+                html: "<html></html>".to_string(),
+                cookies: vec![],
+            })
+        }
+    }
+    
+    #[cfg(not(feature = "browser"))]
+    pub async fn navigate(&self, url: &str) -> Result<PageSnapshot> {
         Ok(PageSnapshot {
-            url: _url.to_string(),
+            url: url.to_string(),
             title: "Page Title".to_string(),
             html: "<html></html>".to_string(),
             cookies: vec![],
@@ -61,6 +129,24 @@ impl BrowserDriver {
         Ok(())
     }
     
+    #[cfg(feature = "browser")]
+    pub async fn evaluate_js(&self, script: &str) -> Result<String> {
+        if let Some(browser) = &self.browser {
+            let page = browser.new_page("about:blank")
+                .await
+                .context("Failed to create new page")?;
+            
+            let result = page.evaluate(script)
+                .await
+                .context("Failed to evaluate JavaScript")?;
+            
+            Ok(result.to_string())
+        } else {
+            Ok("null".to_string())
+        }
+    }
+    
+    #[cfg(not(feature = "browser"))]
     pub async fn evaluate_js(&self, _script: &str) -> Result<String> {
         Ok("null".to_string())
     }
@@ -73,6 +159,24 @@ impl BrowserDriver {
         Ok(vec![])
     }
     
+    #[cfg(feature = "browser")]
+    pub async fn screenshot(&self) -> Result<Vec<u8>> {
+        if let Some(browser) = &self.browser {
+            let page = browser.new_page("about:blank")
+                .await
+                .context("Failed to create new page")?;
+            
+            let screenshot = page.screenshot(chromiumoxide::page::ScreenshotParams::default())
+                .await
+                .context("Failed to take screenshot")?;
+            
+            Ok(screenshot)
+        } else {
+            Ok(vec![])
+        }
+    }
+    
+    #[cfg(not(feature = "browser"))]
     pub async fn screenshot(&self) -> Result<Vec<u8>> {
         Ok(vec![])
     }
@@ -88,18 +192,32 @@ mod tests {
 
     #[tokio::test]
     async fn test_browser_driver_creation() {
-        let driver = BrowserDriver::new(true);
+        let driver = BrowserDriver::new(true).await;
         assert!(driver.is_ok());
     }
     
     #[tokio::test]
     async fn test_navigate() {
-        let driver = BrowserDriver::new(true).unwrap();
+        let driver = BrowserDriver::new(true).await.unwrap();
         let snapshot = driver.navigate("https://example.com").await;
         assert!(snapshot.is_ok());
         
         let snapshot = snapshot.unwrap();
         assert_eq!(snapshot.url, "https://example.com");
+    }
+    
+    #[tokio::test]
+    async fn test_screenshot() {
+        let driver = BrowserDriver::new(true).await.unwrap();
+        let screenshot = driver.screenshot().await;
+        assert!(screenshot.is_ok());
+    }
+    
+    #[tokio::test]
+    async fn test_evaluate_js() {
+        let driver = BrowserDriver::new(true).await.unwrap();
+        let result = driver.evaluate_js("1 + 1").await;
+        assert!(result.is_ok());
     }
     
     #[test]

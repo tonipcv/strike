@@ -4,11 +4,23 @@ use serde::{Deserialize, Serialize};
 use std::env;
 
 use super::provider::{LlmPrompt, LlmProvider, LlmResponse};
+use super::retry::{RetryConfig, RetryStrategy};
+use super::cache::{CacheConfig, LlmCache};
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct OpenAiProvider {
     client: async_openai::Client<async_openai::config::OpenAIConfig>,
     model: String,
+    retry_strategy: RetryStrategy,
+    cache: LlmCache,
+}
+
+impl std::fmt::Debug for OpenAiProvider {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("OpenAiProvider")
+            .field("model", &self.model)
+            .finish()
+    }
 }
 
 impl OpenAiProvider {
@@ -22,76 +34,105 @@ impl OpenAiProvider {
         let client = async_openai::Client::with_config(config);
         let model = model.unwrap_or_else(|| "gpt-4o".to_string());
         
-        Ok(Self { client, model })
+        Ok(Self { 
+            client, 
+            model,
+            retry_strategy: RetryStrategy::default(),
+            cache: LlmCache::new(CacheConfig::default()),
+        })
     }
 }
 
 #[async_trait]
 impl LlmProvider for OpenAiProvider {
     async fn complete(&self, prompt: LlmPrompt) -> Result<LlmResponse> {
-        use async_openai::types::{
-            ChatCompletionRequestMessage, ChatCompletionRequestSystemMessageArgs,
-            ChatCompletionRequestUserMessageArgs, CreateChatCompletionRequestArgs,
-        };
-        
-        let mut messages: Vec<ChatCompletionRequestMessage> = vec![];
-        
-        if let Some(system) = prompt.system {
-            messages.push(
-                ChatCompletionRequestSystemMessageArgs::default()
-                    .content(system)
-                    .build()?
-                    .into()
-            );
+        if let Some(cached) = self.cache.get("openai", &self.model, &prompt).await {
+            return Ok(cached);
         }
         
-        messages.push(
-            ChatCompletionRequestUserMessageArgs::default()
-                .content(prompt.user)
-                .build()?
-                .into()
-        );
+        let client = self.client.clone();
+        let model = self.model.clone();
+        let cost_per_1k: f64 = self.estimated_cost_per_1k_tokens();
+        let cache = self.cache.clone();
+        let prompt_for_cache = prompt.clone();
         
-        let mut request_builder = CreateChatCompletionRequestArgs::default();
-        request_builder
-            .model(&self.model)
-            .messages(messages)
-            .temperature(prompt.temperature)
-            .max_tokens(prompt.max_tokens as u32);
+        let result = self.retry_strategy.execute_with_retry(|| {
+            let client = client.clone();
+            let model = model.clone();
+            let prompt_clone = prompt.clone();
+            
+            async move {
+                use async_openai::types::{
+                    ChatCompletionRequestMessage, ChatCompletionRequestSystemMessageArgs,
+                    ChatCompletionRequestUserMessageArgs, CreateChatCompletionRequestArgs,
+                };
+                
+                let mut messages: Vec<ChatCompletionRequestMessage> = vec![];
+                
+                if let Some(system) = &prompt_clone.system {
+                    messages.push(
+                        ChatCompletionRequestSystemMessageArgs::default()
+                            .content(system.clone())
+                            .build()?
+                            .into()
+                    );
+                }
+                
+                messages.push(
+                    ChatCompletionRequestUserMessageArgs::default()
+                        .content(prompt_clone.user.clone())
+                        .build()?
+                        .into()
+                );
+                
+                let mut request_builder = CreateChatCompletionRequestArgs::default();
+                request_builder
+                    .model(&model)
+                    .messages(messages)
+                    .temperature(prompt_clone.temperature)
+                    .max_tokens(prompt_clone.max_tokens as u32);
+                
+                if !prompt_clone.stop_sequences.is_empty() {
+                    request_builder.stop(prompt_clone.stop_sequences.clone());
+                }
+                
+                let request = request_builder.build()?;
+                
+                let response: async_openai::types::CreateChatCompletionResponse = client
+                    .chat()
+                    .create(request)
+                    .await
+                    .context("Failed to get response from OpenAI API")?;
+                
+                let choice = response.choices.first()
+                    .context("No choices in OpenAI response")?;
+                
+                let content = choice.message.content.clone()
+                    .unwrap_or_default();
+                
+                let tokens_used = response.usage
+                    .map(|u| (u.prompt_tokens + u.completion_tokens) as usize)
+                    .unwrap_or(0);
+                
+                let cost_usd = (tokens_used as f64 / 1000.0) * cost_per_1k;
+                
+                Ok::<LlmResponse, anyhow::Error>(LlmResponse {
+                    content,
+                    model: response.model.clone(),
+                    tokens_used,
+                    finish_reason: choice.finish_reason.as_ref()
+                        .map(|r| format!("{:?}", r))
+                        .unwrap_or_else(|| "unknown".to_string()),
+                    cost_usd,
+                })
+            }
+        }).await;
         
-        if !prompt.stop_sequences.is_empty() {
-            request_builder.stop(prompt.stop_sequences);
+        if let Ok(ref response) = result {
+            cache.put("openai", &model, &prompt_for_cache, response.clone()).await;
         }
         
-        let request = request_builder.build()?;
-        
-        let response = self.client
-            .chat()
-            .create(request)
-            .await
-            .context("Failed to get response from OpenAI API")?;
-        
-        let choice = response.choices.first()
-            .context("No choices in OpenAI response")?;
-        
-        let content = choice.message.content.clone()
-            .unwrap_or_default();
-        
-        let tokens_used = response.usage
-            .map(|u| (u.prompt_tokens + u.completion_tokens) as usize)
-            .unwrap_or(0);
-        
-        let cost_usd = self.estimate_cost(tokens_used);
-        
-        Ok(LlmResponse {
-            content,
-            model: response.model.clone(),
-            tokens_used,
-            finish_reason: choice.finish_reason.as_ref()
-                .map(|r| format!("{:?}", r))
-                .unwrap_or_else(|| "unknown".to_string()),
-            cost_usd,
-        })
+        result
     }
     
     fn model_id(&self) -> &str {
@@ -130,6 +171,8 @@ mod tests {
         let provider = OpenAiProvider {
             client: async_openai::Client::new(),
             model: "gpt-4o".to_string(),
+            retry_strategy: RetryStrategy::default(),
+            cache: LlmCache::disabled(),
         };
         
         let cost = provider.estimate_cost(10_000);
@@ -141,6 +184,8 @@ mod tests {
         let provider = OpenAiProvider {
             client: async_openai::Client::new(),
             model: "gpt-4o".to_string(),
+            retry_strategy: RetryStrategy::default(),
+            cache: LlmCache::disabled(),
         };
         
         assert_eq!(provider.token_limit(), 128_000);

@@ -13,6 +13,9 @@ pub struct Cli {
 
     #[arg(long, global = true, help = "Output format: json, text")]
     pub format: Option<String>,
+
+    #[arg(long, global = true, help = "Allow private IPs and localhost (use with caution)")]
+    pub allow_private: bool,
 }
 
 #[derive(Subcommand)]

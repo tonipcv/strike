@@ -1,9 +1,10 @@
-pub mod engine;
-pub mod state;
 pub mod checkpoint;
+pub mod engine;
 pub mod events;
-pub mod phases;
 pub mod graph;
+pub mod phases;
+pub mod recovery;
+pub mod state;
 
 pub use engine::WorkflowEngine;
 pub use state::{WorkflowState, PhaseStatus};

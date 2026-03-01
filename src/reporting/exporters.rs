@@ -176,16 +176,149 @@ impl PdfExporter {
         Self
     }
     
-    pub fn generate_placeholder(&self, report: &HtmlReport) -> Result<Vec<u8>> {
-        let content = format!(
-            "PDF Report: {}\n\nSummary: {}\n\nFindings: {}\n\nGenerated: {}",
-            report.title,
-            report.summary,
-            report.findings.len(),
-            report.generated_at
+    pub fn generate(&self, report: &HtmlReport) -> Result<Vec<u8>> {
+        use printpdf::*;
+        
+        let (doc, page1, layer1) = PdfDocument::new(
+            &report.title,
+            Mm(210.0),
+            Mm(297.0),
+            "Layer 1"
         );
         
-        Ok(content.into_bytes())
+        let font = doc.add_builtin_font(BuiltinFont::Helvetica)?;
+        let font_bold = doc.add_builtin_font(BuiltinFont::HelveticaBold)?;
+        
+        let current_layer = doc.get_page(page1).get_layer(layer1);
+        
+        let mut y_position = Mm(270.0);
+        let left_margin = Mm(20.0);
+        let right_margin = Mm(190.0);
+        
+        current_layer.use_text(&report.title, 24.0, left_margin, y_position, &font_bold);
+        y_position -= Mm(10.0);
+        
+        current_layer.use_text(
+            &format!("Generated: {}", report.generated_at),
+            10.0,
+            left_margin,
+            y_position,
+            &font
+        );
+        y_position -= Mm(15.0);
+        
+        current_layer.use_text("Summary", 16.0, left_margin, y_position, &font_bold);
+        y_position -= Mm(7.0);
+        
+        let summary_lines = self.wrap_text(&report.summary, 80);
+        for line in summary_lines {
+            current_layer.use_text(&line, 11.0, left_margin, y_position, &font);
+            y_position -= Mm(5.0);
+        }
+        
+        y_position -= Mm(10.0);
+        
+        current_layer.use_text(
+            &format!("Findings ({})", report.findings.len()),
+            16.0,
+            left_margin,
+            y_position,
+            &font_bold
+        );
+        y_position -= Mm(10.0);
+        
+        for (idx, finding) in report.findings.iter().enumerate() {
+            if y_position < Mm(30.0) {
+                let (new_page, new_layer) = doc.add_page(Mm(210.0), Mm(297.0), "Layer 1");
+                let current_layer = doc.get_page(new_page).get_layer(new_layer);
+                y_position = Mm(270.0);
+            }
+            
+            current_layer.use_text(
+                &format!("{}. {}", idx + 1, finding.title),
+                12.0,
+                left_margin,
+                y_position,
+                &font_bold
+            );
+            y_position -= Mm(6.0);
+            
+            let severity_color = match finding.severity.to_lowercase().as_str() {
+                "critical" => Color::Rgb(Rgb::new(0.82, 0.18, 0.18, None)),
+                "high" => Color::Rgb(Rgb::new(0.96, 0.49, 0.0, None)),
+                "medium" => Color::Rgb(Rgb::new(0.98, 0.75, 0.18, None)),
+                "low" => Color::Rgb(Rgb::new(0.22, 0.56, 0.24, None)),
+                _ => Color::Rgb(Rgb::new(0.5, 0.5, 0.5, None)),
+            };
+            
+            current_layer.set_fill_color(severity_color);
+            current_layer.use_text(
+                &format!("Severity: {}", finding.severity),
+                10.0,
+                left_margin,
+                y_position,
+                &font
+            );
+            current_layer.set_fill_color(Color::Rgb(Rgb::new(0.0, 0.0, 0.0, None)));
+            y_position -= Mm(6.0);
+            
+            current_layer.use_text("Description:", 10.0, left_margin, y_position, &font_bold);
+            y_position -= Mm(5.0);
+            
+            let desc_lines = self.wrap_text(&finding.description, 80);
+            for line in desc_lines {
+                current_layer.use_text(&line, 9.0, left_margin + Mm(5.0), y_position, &font);
+                y_position -= Mm(4.5);
+            }
+            
+            y_position -= Mm(3.0);
+            current_layer.use_text("Remediation:", 10.0, left_margin, y_position, &font_bold);
+            y_position -= Mm(5.0);
+            
+            let rem_lines = self.wrap_text(&finding.remediation, 80);
+            for line in rem_lines {
+                current_layer.use_text(&line, 9.0, left_margin + Mm(5.0), y_position, &font);
+                y_position -= Mm(4.5);
+            }
+            
+            y_position -= Mm(8.0);
+        }
+        
+        let pdf_bytes = doc.save_to_bytes()?;
+        Ok(pdf_bytes)
+    }
+    
+    fn wrap_text(&self, text: &str, max_chars: usize) -> Vec<String> {
+        let mut lines = Vec::new();
+        let mut current_line = String::new();
+        
+        for word in text.split_whitespace() {
+            if current_line.len() + word.len() + 1 > max_chars {
+                if !current_line.is_empty() {
+                    lines.push(current_line.clone());
+                    current_line.clear();
+                }
+            }
+            
+            if !current_line.is_empty() {
+                current_line.push(' ');
+            }
+            current_line.push_str(word);
+        }
+        
+        if !current_line.is_empty() {
+            lines.push(current_line);
+        }
+        
+        if lines.is_empty() {
+            lines.push(String::new());
+        }
+        
+        lines
+    }
+    
+    pub fn generate_placeholder(&self, report: &HtmlReport) -> Result<Vec<u8>> {
+        self.generate(report)
     }
 }
 

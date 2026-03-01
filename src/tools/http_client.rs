@@ -5,6 +5,29 @@ use std::collections::HashMap;
 use tokio::sync::Semaphore;
 use std::sync::Arc;
 
+#[derive(Debug, Clone)]
+pub struct HttpClientConfig {
+    pub rate_limit: u32,
+    pub timeout_seconds: u64,
+    pub pool_max_idle_per_host: usize,
+    pub pool_idle_timeout_seconds: u64,
+    pub tcp_keepalive_seconds: u64,
+    pub http2_adaptive_window: bool,
+}
+
+impl Default for HttpClientConfig {
+    fn default() -> Self {
+        Self {
+            rate_limit: 50,
+            timeout_seconds: 30,
+            pool_max_idle_per_host: 32,
+            pool_idle_timeout_seconds: 90,
+            tcp_keepalive_seconds: 60,
+            http2_adaptive_window: true,
+        }
+    }
+}
+
 pub struct HttpClient {
     client: Client,
     rate_limiter: Arc<Semaphore>,
@@ -13,15 +36,27 @@ pub struct HttpClient {
 
 impl HttpClient {
     pub fn new(rate_limit: u32, timeout_seconds: u64) -> Result<Self> {
+        let config = HttpClientConfig {
+            rate_limit,
+            timeout_seconds,
+            ..Default::default()
+        };
+        Self::with_config(config)
+    }
+    
+    pub fn with_config(config: HttpClientConfig) -> Result<Self> {
         let client = Client::builder()
-            .timeout(Duration::from_secs(timeout_seconds))
+            .timeout(Duration::from_secs(config.timeout_seconds))
             .danger_accept_invalid_certs(false)
             .redirect(reqwest::redirect::Policy::limited(10))
+            .pool_max_idle_per_host(config.pool_max_idle_per_host)
+            .pool_idle_timeout(Duration::from_secs(config.pool_idle_timeout_seconds))
+            .tcp_keepalive(Duration::from_secs(config.tcp_keepalive_seconds))
             .build()?;
 
         Ok(Self {
             client,
-            rate_limiter: Arc::new(Semaphore::new(rate_limit as usize)),
+            rate_limiter: Arc::new(Semaphore::new(config.rate_limit as usize)),
             default_headers: HashMap::new(),
         })
     }
@@ -96,5 +131,31 @@ mod tests {
     async fn test_http_client_creation() {
         let client = HttpClient::new(50, 30);
         assert!(client.is_ok());
+    }
+    
+    #[tokio::test]
+    async fn test_http_client_with_config() {
+        let config = HttpClientConfig {
+            rate_limit: 100,
+            timeout_seconds: 60,
+            pool_max_idle_per_host: 64,
+            pool_idle_timeout_seconds: 120,
+            tcp_keepalive_seconds: 30,
+            http2_adaptive_window: true,
+        };
+        
+        let client = HttpClient::with_config(config);
+        assert!(client.is_ok());
+    }
+    
+    #[test]
+    fn test_http_client_config_default() {
+        let config = HttpClientConfig::default();
+        assert_eq!(config.rate_limit, 50);
+        assert_eq!(config.timeout_seconds, 30);
+        assert_eq!(config.pool_max_idle_per_host, 32);
+        assert_eq!(config.pool_idle_timeout_seconds, 90);
+        assert_eq!(config.tcp_keepalive_seconds, 60);
+        assert!(config.http2_adaptive_window);
     }
 }

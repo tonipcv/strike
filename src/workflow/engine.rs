@@ -7,11 +7,13 @@ use tokio::sync::RwLock;
 use super::checkpoint::CheckpointManager;
 use super::events::{EventBus, WorkflowEvent};
 use super::phases::{PhaseConfig, WorkflowPhase};
+use super::recovery::RecoveryManager;
 use super::state::{PhaseStatus, WorkflowState};
 
 pub struct WorkflowEngine {
     state: Arc<RwLock<WorkflowState>>,
     checkpoint_manager: Arc<CheckpointManager>,
+    recovery_manager: Arc<RecoveryManager>,
     event_bus: EventBus,
     pipeline: Vec<PhaseConfig>,
     auto_checkpoint: bool,
@@ -23,8 +25,11 @@ impl WorkflowEngine {
         pool: SqlitePool,
         pipeline: Option<Vec<PhaseConfig>>,
     ) -> Result<Self> {
-        let checkpoint_manager = Arc::new(CheckpointManager::new(pool));
+        let checkpoint_manager = Arc::new(CheckpointManager::new(pool.clone()));
         checkpoint_manager.ensure_tables().await?;
+        
+        let recovery_manager = Arc::new(RecoveryManager::new(pool));
+        recovery_manager.ensure_tables().await?;
         
         let state = Arc::new(RwLock::new(WorkflowState::new(run_id.clone())));
         let event_bus = EventBus::new(1000);
@@ -33,6 +38,7 @@ impl WorkflowEngine {
         let engine = Self {
             state,
             checkpoint_manager,
+            recovery_manager,
             event_bus,
             pipeline,
             auto_checkpoint: true,
@@ -51,8 +57,11 @@ impl WorkflowEngine {
         pool: SqlitePool,
         pipeline: Option<Vec<PhaseConfig>>,
     ) -> Result<Self> {
-        let checkpoint_manager = Arc::new(CheckpointManager::new(pool));
+        let checkpoint_manager = Arc::new(CheckpointManager::new(pool.clone()));
         checkpoint_manager.ensure_tables().await?;
+        
+        let recovery_manager = Arc::new(RecoveryManager::new(pool));
+        recovery_manager.ensure_tables().await?;
         
         let restored_state = checkpoint_manager
             .restore_state(&run_id)
@@ -66,6 +75,7 @@ impl WorkflowEngine {
         Ok(Self {
             state,
             checkpoint_manager,
+            recovery_manager,
             event_bus,
             pipeline,
             auto_checkpoint: true,
@@ -122,6 +132,7 @@ impl WorkflowEngine {
     
     pub async fn fail_phase(&self, phase: WorkflowPhase, error: String) -> Result<()> {
         let phase_name = phase.name().to_string();
+        let run_id = self.get_run_id().await;
         
         {
             let mut state = self.state.write().await;
@@ -129,17 +140,54 @@ impl WorkflowEngine {
         }
         
         self.publish_event(WorkflowEvent::PhaseFailed {
-            run_id: self.get_run_id().await,
+            run_id: run_id.clone(),
             phase: phase_name.clone(),
-            error,
+            error: error.clone(),
             timestamp: Utc::now(),
         });
+        
+        let state_snapshot = {
+            let state = self.state.read().await;
+            serde_json::to_string(&*state)?
+        };
+        
+        self.recovery_manager
+            .add_to_dead_letter_queue(&run_id, &phase_name, &error, &state_snapshot)
+            .await?;
+        
+        self.recovery_manager
+            .execute_compensating_actions(&run_id, &phase_name)
+            .await?;
         
         if self.auto_checkpoint {
             self.save_checkpoint(&phase_name).await?;
         }
         
         Ok(())
+    }
+    
+    pub async fn register_compensation(
+        &self,
+        phase: &WorkflowPhase,
+        action_type: &str,
+        payload: serde_json::Value,
+    ) -> Result<String> {
+        let run_id = self.get_run_id().await;
+        let phase_name = phase.name();
+        
+        self.recovery_manager
+            .register_compensating_action(&run_id, phase_name, action_type, payload)
+            .await
+    }
+    
+    pub async fn validate_consistency(&self) -> Result<bool> {
+        let run_id = self.get_run_id().await;
+        self.recovery_manager.validate_state_consistency(&run_id).await
+    }
+    
+    pub async fn get_dead_letter_entries(&self) -> Result<Vec<super::recovery::DeadLetterEntry>> {
+        let run_id = self.get_run_id().await;
+        self.recovery_manager.get_dead_letter_entries(&run_id).await
     }
     
     pub async fn save_checkpoint(&self, phase: &str) -> Result<String> {

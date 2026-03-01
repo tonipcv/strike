@@ -1,12 +1,9 @@
 use anyhow::Result;
-use crate::tools::{HttpClient, PortScanner, DnsResolver};
-use std::net::IpAddr;
+use crate::tools::HttpClient;
 use url::Url;
 
 pub struct ReconAgent {
     http_client: HttpClient,
-    port_scanner: PortScanner,
-    dns_resolver: DnsResolver,
 }
 
 #[derive(Debug, Clone)]
@@ -23,8 +20,6 @@ impl ReconAgent {
     pub async fn new() -> Result<Self> {
         Ok(Self {
             http_client: HttpClient::new(50, 30)?,
-            port_scanner: PortScanner::new(1000),
-            dns_resolver: DnsResolver::new().await?,
         })
     }
 
@@ -32,14 +27,9 @@ impl ReconAgent {
         let url = Url::parse(target)?;
         let domain = url.host_str().ok_or_else(|| anyhow::anyhow!("Invalid target URL"))?;
 
-        let ip_addresses = self.dns_resolver.resolve(domain).await?;
-
+        let ip_addresses: Vec<String> = vec![];
+        
         let mut open_ports = Vec::new();
-        if let Some(first_ip) = ip_addresses.first() {
-            if let Ok(ip) = first_ip.parse::<IpAddr>() {
-                open_ports = self.port_scanner.scan_common_ports(ip).await?;
-            }
-        }
 
         let technologies = self.detect_technologies(target).await?;
         let endpoints = self.discover_endpoints(target).await?;
@@ -96,14 +86,30 @@ impl ReconAgent {
     pub async fn enumerate_subdomains(&self, domain: &str) -> Result<Vec<String>> {
         let common_subdomains = vec![
             "www", "api", "admin", "dev", "staging", "test", "mail", "ftp",
+            "blog", "shop", "store", "portal", "app", "mobile", "m", "beta",
+            "alpha", "demo", "sandbox", "vpn", "cdn", "static", "assets",
+            "media", "images", "files", "docs", "help", "support", "status",
         ];
 
         let mut found_subdomains = Vec::new();
 
         for subdomain in common_subdomains {
             let full_domain = format!("{}.{}", subdomain, domain);
-            if let Ok(_) = self.dns_resolver.resolve(&full_domain).await {
-                found_subdomains.push(full_domain);
+            
+            // Try HTTP/HTTPS connection as DNS alternative
+            let test_urls = vec![
+                format!("https://{}", full_domain),
+                format!("http://{}", full_domain),
+            ];
+            
+            for url in test_urls {
+                match self.http_client.get(&url).await {
+                    Ok(_) => {
+                        found_subdomains.push(full_domain.clone());
+                        break;
+                    }
+                    Err(_) => continue,
+                }
             }
         }
 

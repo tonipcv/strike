@@ -13,14 +13,6 @@ use crate::llm::{
 #[cfg(not(test))]
 use crate::models::vuln_class::VulnClass;
 
-#[cfg(test)]
-use strike_security::llm::{
-    provider::{LlmPrompt, LlmResponse, TaskClass},
-    prompt::{EndpointInfo, PromptTemplate},
-    router::LlmRouter,
-};
-#[cfg(test)]
-use strike_security::models::vuln_class::VulnClass;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Hypothesis {

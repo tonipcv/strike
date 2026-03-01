@@ -2,27 +2,15 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-#[cfg(not(test))]
 use crate::llm::{
     provider::{LlmPrompt, LlmResponse, TaskClass},
     prompt::{FindingContext, PromptTemplate},
     router::LlmRouter,
 };
-#[cfg(not(test))]
-use crate::models::finding::Finding;
-#[cfg(not(test))]
-use crate::agents::root_cause::RootCauseAnalysis;
 
-#[cfg(test)]
-use strike_security::llm::{
-    provider::{LlmPrompt, LlmResponse, TaskClass},
-    prompt::{FindingContext, PromptTemplate},
-    router::LlmRouter,
-};
-#[cfg(test)]
-use strike_security::models::finding::Finding;
-#[cfg(test)]
-use strike_security::agents::root_cause::RootCauseAnalysis;
+use crate::models::finding::Finding;
+
+use crate::agents::root_cause::RootCauseAnalysis;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RemediationGuidance {
@@ -183,7 +171,7 @@ impl RemediationAgent {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use strike_security::llm::router::RouterConfig;
+    use crate::llm::router::RouterConfig;
 
     #[test]
     fn test_quick_fix_summary() {

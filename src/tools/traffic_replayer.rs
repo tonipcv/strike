@@ -80,6 +80,112 @@ impl TrafficReplayer {
         Ok(record.response.clone())
     }
     
+    pub async fn replay_with_mutations(&self, request: &RecordedRequest, strategy: MutationStrategy) -> Result<Vec<ReplayResult>> {
+        let mut results = Vec::new();
+        
+        match strategy {
+            MutationStrategy::ParameterFuzzing => {
+                // Mutate each parameter with common payloads
+                let payloads = vec![
+                    "' OR '1'='1", "admin' --", "<script>alert(1)</script>",
+                    "../../../etc/passwd", "{{7*7}}", "${7*7}",
+                ];
+                
+                for payload in payloads {
+                    let mut mutated = request.clone();
+                    mutated.body = Some(payload.to_string());
+                    
+                    let response = reqwest::Client::new()
+                        .post(&mutated.url)
+                        .body(payload)
+                        .send()
+                        .await?;
+                    
+                    results.push(ReplayResult {
+                        request: mutated,
+                        response_status: response.status().as_u16(),
+                        response_body: response.text().await?,
+                        response_time_ms: 100,
+                        mutation_applied: Some(payload.to_string()),
+                    });
+                }
+            },
+            MutationStrategy::HeaderInjection => {
+                // Inject malicious headers
+                let headers = vec![
+                    ("X-Forwarded-For", "127.0.0.1"),
+                    ("X-Original-URL", "/admin"),
+                    ("X-Rewrite-URL", "/admin"),
+                ];
+                
+                for (header_name, header_value) in headers {
+                    let response = reqwest::Client::new()
+                        .get(&request.url)
+                        .header(header_name, header_value)
+                        .send()
+                        .await?;
+                    
+                    results.push(ReplayResult {
+                        request: request.clone(),
+                        response_status: response.status().as_u16(),
+                        response_body: response.text().await?,
+                        response_time_ms: 100,
+                        mutation_applied: Some(format!("{}: {}", header_name, header_value)),
+                    });
+                }
+            },
+            MutationStrategy::MethodSwapping => {
+                // Try different HTTP methods
+                let methods = vec!["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"];
+                
+                for method in methods {
+                    let response = match method {
+                        "GET" => reqwest::Client::new().get(&request.url).send().await?,
+                        "POST" => reqwest::Client::new().post(&request.url).send().await?,
+                        "PUT" => reqwest::Client::new().put(&request.url).send().await?,
+                        "DELETE" => reqwest::Client::new().delete(&request.url).send().await?,
+                        _ => continue,
+                    };
+                    
+                    results.push(ReplayResult {
+                        request: request.clone(),
+                        response_status: response.status().as_u16(),
+                        response_body: response.text().await?,
+                        response_time_ms: 100,
+                        mutation_applied: Some(format!("Method: {}", method)),
+                    });
+                }
+            },
+            MutationStrategy::AuthBypass => {
+                // Try authentication bypass techniques
+                let bypass_headers = vec![
+                    ("X-Original-URL", "/admin"),
+                    ("X-Custom-IP-Authorization", "127.0.0.1"),
+                    ("X-Forwarded-For", "localhost"),
+                ];
+                
+                for (header_name, header_value) in bypass_headers {
+                    let response = reqwest::Client::new()
+                        .get(&request.url)
+                        .header(header_name, header_value)
+                        .send()
+                        .await?;
+                    
+                    results.push(ReplayResult {
+                        request: request.clone(),
+                        response_status: response.status().as_u16(),
+                        response_body: response.text().await?,
+                        response_time_ms: 100,
+                        mutation_applied: Some(format!("Auth bypass: {}", header_name)),
+                    });
+                }
+            },
+            _ => {}
+        }
+        
+        Ok(results)
+    }
+    
     pub fn mutate_param(&self, param: &str, strategy: MutationStrategy) -> Vec<String> {
         match strategy {
             MutationStrategy::IdorIncrement => {

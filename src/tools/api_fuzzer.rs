@@ -33,16 +33,305 @@ impl ApiFuzzer {
         requests
     }
     
-    pub fn fuzz_from_graphql(&self, _introspection: &Value) -> Vec<FuzzRequest> {
+    pub fn fuzz_from_graphql(&self, introspection: &Value) -> Vec<FuzzRequest> {
         let mut requests = Vec::new();
         
         requests.push(FuzzRequest {
             method: "POST".to_string(),
             url: "/graphql".to_string(),
-            headers: HashMap::new(),
-            body: Some("{\"query\":\"{ __schema { types { name } } }\"}".to_string()),
+            headers: self.graphql_headers(),
+            body: Some(self.introspection_query()),
             mutation_type: "introspection".to_string(),
         });
+        
+        if let Some(schema) = introspection.get("data").and_then(|d| d.get("__schema")) {
+            if let Some(types) = schema.get("types").and_then(|t| t.as_array()) {
+                for type_obj in types {
+                    if let Some(type_name) = type_obj.get("name").and_then(|n| n.as_str()) {
+                        if !type_name.starts_with("__") && !self.is_builtin_type(type_name) {
+                            requests.extend(self.generate_query_fuzzing(type_name, type_obj));
+                            requests.extend(self.generate_mutation_fuzzing(type_name, type_obj));
+                        }
+                    }
+                }
+            }
+            
+            if let Some(mutation_type) = schema.get("mutationType") {
+                if let Some(fields) = mutation_type.get("fields").and_then(|f| f.as_array()) {
+                    for field in fields {
+                        if let Some(field_name) = field.get("name").and_then(|n| n.as_str()) {
+                            requests.extend(self.generate_mutation_attack(field_name, field));
+                        }
+                    }
+                }
+            }
+        }
+        
+        requests.extend(self.generate_batching_attacks());
+        requests.extend(self.generate_depth_attacks());
+        requests.extend(self.generate_directive_attacks());
+        
+        requests
+    }
+    
+    fn introspection_query(&self) -> String {
+        r#"{
+            "query": "query IntrospectionQuery {
+                __schema {
+                    queryType { name }
+                    mutationType { name }
+                    subscriptionType { name }
+                    types {
+                        ...FullType
+                    }
+                    directives {
+                        name
+                        description
+                        locations
+                        args {
+                            ...InputValue
+                        }
+                    }
+                }
+            }
+            fragment FullType on __Type {
+                kind
+                name
+                description
+                fields(includeDeprecated: true) {
+                    name
+                    description
+                    args {
+                        ...InputValue
+                    }
+                    type {
+                        ...TypeRef
+                    }
+                    isDeprecated
+                    deprecationReason
+                }
+                inputFields {
+                    ...InputValue
+                }
+                interfaces {
+                    ...TypeRef
+                }
+                enumValues(includeDeprecated: true) {
+                    name
+                    description
+                    isDeprecated
+                    deprecationReason
+                }
+                possibleTypes {
+                    ...TypeRef
+                }
+            }
+            fragment InputValue on __InputValue {
+                name
+                description
+                type { ...TypeRef }
+                defaultValue
+            }
+            fragment TypeRef on __Type {
+                kind
+                name
+                ofType {
+                    kind
+                    name
+                    ofType {
+                        kind
+                        name
+                        ofType {
+                            kind
+                            name
+                            ofType {
+                                kind
+                                name
+                                ofType {
+                                    kind
+                                    name
+                                    ofType {
+                                        kind
+                                        name
+                                        ofType {
+                                            kind
+                                            name
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }"
+        }"#.to_string()
+    }
+    
+    fn graphql_headers(&self) -> HashMap<String, String> {
+        let mut headers = HashMap::new();
+        headers.insert("Content-Type".to_string(), "application/json".to_string());
+        headers
+    }
+    
+    fn is_builtin_type(&self, type_name: &str) -> bool {
+        matches!(type_name, "String" | "Int" | "Float" | "Boolean" | "ID")
+    }
+    
+    fn generate_query_fuzzing(&self, type_name: &str, type_obj: &Value) -> Vec<FuzzRequest> {
+        let mut requests = Vec::new();
+        
+        if let Some(fields) = type_obj.get("fields").and_then(|f| f.as_array()) {
+            for field in fields.iter().take(5) {
+                if let Some(field_name) = field.get("name").and_then(|n| n.as_str()) {
+                    let query = format!(
+                        r#"{{"query": "{{ {} {{ {} }} }}"}}"#,
+                        type_name.to_lowercase(),
+                        field_name
+                    );
+                    
+                    requests.push(FuzzRequest {
+                        method: "POST".to_string(),
+                        url: "/graphql".to_string(),
+                        headers: self.graphql_headers(),
+                        body: Some(query),
+                        mutation_type: format!("query_{}", type_name),
+                    });
+                }
+            }
+        }
+        
+        requests
+    }
+    
+    fn generate_mutation_fuzzing(&self, type_name: &str, _type_obj: &Value) -> Vec<FuzzRequest> {
+        let mut requests = Vec::new();
+        
+        let mutation_names = vec![
+            format!("create{}", type_name),
+            format!("update{}", type_name),
+            format!("delete{}", type_name),
+        ];
+        
+        for mutation_name in mutation_names {
+            let query = format!(
+                r#"{{"query": "mutation {{ {}(input: {{}}) {{ id }} }}"}}"#,
+                mutation_name
+            );
+            
+            requests.push(FuzzRequest {
+                method: "POST".to_string(),
+                url: "/graphql".to_string(),
+                headers: self.graphql_headers(),
+                body: Some(query),
+                mutation_type: format!("mutation_{}", mutation_name),
+            });
+        }
+        
+        requests
+    }
+    
+    fn generate_mutation_attack(&self, field_name: &str, field: &Value) -> Vec<FuzzRequest> {
+        let mut requests = Vec::new();
+        
+        let malicious_inputs = vec![
+            r#"{"id": "' OR '1'='1"}"#,
+            r#"{"id": "../../../etc/passwd"}"#,
+            r#"{"id": "<script>alert(1)</script>"}"#,
+            r#"{"id": null}"#,
+        ];
+        
+        for input in malicious_inputs {
+            let query = format!(
+                r#"{{"query": "mutation {{ {}(input: {}) {{ id }} }}"}}"#,
+                field_name, input
+            );
+            
+            requests.push(FuzzRequest {
+                method: "POST".to_string(),
+                url: "/graphql".to_string(),
+                headers: self.graphql_headers(),
+                body: Some(query),
+                mutation_type: format!("mutation_attack_{}", field_name),
+            });
+        }
+        
+        requests
+    }
+    
+    fn generate_batching_attacks(&self) -> Vec<FuzzRequest> {
+        let mut requests = Vec::new();
+        
+        let batch_sizes = vec![10, 50, 100, 500];
+        
+        for size in batch_sizes {
+            let queries: Vec<String> = (0..size)
+                .map(|i| format!(r#"{{"query": "{{ user(id: {}) {{ id name }} }}"}}"#, i))
+                .collect();
+            
+            let batch_body = format!("[{}]", queries.join(","));
+            
+            requests.push(FuzzRequest {
+                method: "POST".to_string(),
+                url: "/graphql".to_string(),
+                headers: self.graphql_headers(),
+                body: Some(batch_body),
+                mutation_type: format!("batching_attack_{}", size),
+            });
+        }
+        
+        requests
+    }
+    
+    fn generate_depth_attacks(&self) -> Vec<FuzzRequest> {
+        let mut requests = Vec::new();
+        
+        let depths = vec![10, 20, 50, 100];
+        
+        for depth in depths {
+            let mut query = String::from("{ user { ");
+            for _ in 0..depth {
+                query.push_str("friends { ");
+            }
+            query.push_str("id ");
+            for _ in 0..depth {
+                query.push_str("} ");
+            }
+            query.push_str("} }");
+            
+            let body = format!(r#"{{"query": "{}"}}"#, query);
+            
+            requests.push(FuzzRequest {
+                method: "POST".to_string(),
+                url: "/graphql".to_string(),
+                headers: self.graphql_headers(),
+                body: Some(body),
+                mutation_type: format!("depth_attack_{}", depth),
+            });
+        }
+        
+        requests
+    }
+    
+    fn generate_directive_attacks(&self) -> Vec<FuzzRequest> {
+        let mut requests = Vec::new();
+        
+        let directive_attacks = vec![
+            r#"{ user @include(if: true) { id } }"#,
+            r#"{ user @skip(if: false) { id } }"#,
+            r#"{ user @deprecated(reason: "test") { id } }"#,
+        ];
+        
+        for attack in directive_attacks {
+            let body = format!(r#"{{"query": "{}"}}"#, attack);
+            
+            requests.push(FuzzRequest {
+                method: "POST".to_string(),
+                url: "/graphql".to_string(),
+                headers: self.graphql_headers(),
+                body: Some(body),
+                mutation_type: "directive_attack".to_string(),
+            });
+        }
         
         requests
     }

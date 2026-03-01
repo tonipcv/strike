@@ -5,12 +5,24 @@ use serde::{Deserialize, Serialize};
 use std::env;
 
 use super::provider::{LlmPrompt, LlmProvider, LlmResponse};
+use super::retry::{RetryConfig, RetryStrategy};
+use super::cache::{CacheConfig, LlmCache};
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct AnthropicProvider {
     api_key: String,
     model: String,
     client: Client,
+    retry_strategy: RetryStrategy,
+    cache: LlmCache,
+}
+
+impl std::fmt::Debug for AnthropicProvider {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AnthropicProvider")
+            .field("model", &self.model)
+            .finish()
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -65,6 +77,8 @@ impl AnthropicProvider {
             api_key,
             model,
             client,
+            retry_strategy: RetryStrategy::default(),
+            cache: LlmCache::new(CacheConfig::default()),
         })
     }
 }
@@ -72,56 +86,81 @@ impl AnthropicProvider {
 #[async_trait]
 impl LlmProvider for AnthropicProvider {
     async fn complete(&self, prompt: LlmPrompt) -> Result<LlmResponse> {
-        let request = AnthropicRequest {
-            model: self.model.clone(),
-            max_tokens: prompt.max_tokens,
-            temperature: prompt.temperature,
-            messages: vec![Message {
-                role: "user".to_string(),
-                content: prompt.user,
-            }],
-            system: prompt.system,
-            stop_sequences: prompt.stop_sequences,
-        };
-        
-        let response = self.client
-            .post("https://api.anthropic.com/v1/messages")
-            .header("x-api-key", &self.api_key)
-            .header("anthropic-version", "2023-06-01")
-            .header("content-type", "application/json")
-            .json(&request)
-            .send()
-            .await
-            .context("Failed to send request to Anthropic API")?;
-        
-        if !response.status().is_success() {
-            let status = response.status();
-            let error_text = response.text().await.unwrap_or_default();
-            anyhow::bail!("Anthropic API error {}: {}", status, error_text);
+        if let Some(cached) = self.cache.get("anthropic", &self.model, &prompt).await {
+            return Ok(cached);
         }
         
-        let anthropic_response: AnthropicResponse = response
-            .json()
-            .await
-            .context("Failed to parse Anthropic API response")?;
+        let api_key = self.api_key.clone();
+        let model = self.model.clone();
+        let client = self.client.clone();
+        let cost_per_1k = self.estimated_cost_per_1k_tokens();
+        let cache = self.cache.clone();
+        let prompt_for_cache = prompt.clone();
         
-        let content = anthropic_response.content
-            .into_iter()
-            .map(|block| block.text)
-            .collect::<Vec<_>>()
-            .join("\n");
+        let result = self.retry_strategy.execute_with_retry(|| {
+            let api_key = api_key.clone();
+            let model = model.clone();
+            let client = client.clone();
+            let prompt_clone = prompt.clone();
+            
+            async move {
+                let request: AnthropicRequest = AnthropicRequest {
+                    model: model.clone(),
+                    max_tokens: prompt_clone.max_tokens,
+                    temperature: prompt_clone.temperature,
+                    messages: vec![Message {
+                        role: "user".to_string(),
+                        content: prompt_clone.user.clone(),
+                    }],
+                    system: prompt_clone.system.clone(),
+                    stop_sequences: prompt_clone.stop_sequences.clone(),
+                };
+                
+                let response: reqwest::Response = client
+                    .post("https://api.anthropic.com/v1/messages")
+                    .header("x-api-key", &api_key)
+                    .header("anthropic-version", "2023-06-01")
+                    .header("content-type", "application/json")
+                    .json(&request)
+                    .send()
+                    .await
+                    .context("Failed to send request to Anthropic API")?;
+                
+                if !response.status().is_success() {
+                    let status = response.status();
+                    let error_text = response.text().await.unwrap_or_default();
+                    anyhow::bail!("Anthropic API error {}: {}", status, error_text);
+                }
+                
+                let anthropic_response: AnthropicResponse = response.json::<AnthropicResponse>()
+                    .await
+                    .context("Failed to parse Anthropic response")?;
+                
+                let content = anthropic_response.content
+                    .into_iter()
+                    .map(|block| block.text)
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                
+                let total_tokens = anthropic_response.usage.input_tokens + anthropic_response.usage.output_tokens;
+                
+                let cost_usd = (total_tokens as f64 / 1000.0) * cost_per_1k;
+                
+                Ok::<LlmResponse, anyhow::Error>(LlmResponse {
+                    content,
+                    model: anthropic_response.model,
+                    tokens_used: total_tokens,
+                    finish_reason: anthropic_response.stop_reason,
+                    cost_usd,
+                })
+            }
+        }).await;
         
-        let total_tokens = anthropic_response.usage.input_tokens + anthropic_response.usage.output_tokens;
+        if let Ok(ref response) = result {
+            cache.put("anthropic", &model, &prompt_for_cache, response.clone()).await;
+        }
         
-        let cost_usd = self.estimate_cost(total_tokens);
-        
-        Ok(LlmResponse {
-            content,
-            model: anthropic_response.model,
-            tokens_used: total_tokens,
-            finish_reason: anthropic_response.stop_reason,
-            cost_usd,
-        })
+        result
     }
     
     fn model_id(&self) -> &str {
@@ -153,6 +192,8 @@ mod tests {
             api_key: "test".to_string(),
             model: "claude-sonnet-4-20250514".to_string(),
             client: Client::new(),
+            retry_strategy: RetryStrategy::default(),
+            cache: LlmCache::disabled(),
         };
         
         let cost = provider.estimate_cost(10_000);

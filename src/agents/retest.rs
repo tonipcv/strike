@@ -1,15 +1,9 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use chrono::DateTime;
 
-#[cfg(not(test))]
 use crate::models::finding::Finding;
-#[cfg(not(test))]
 use crate::tools::http_client::HttpClient;
-
-#[cfg(test)]
-use strike_security::models::finding::Finding;
-#[cfg(test)]
-use strike_security::tools::http_client::HttpClient;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum RetestStatus {
@@ -49,7 +43,8 @@ impl RetestAgent {
         }
     }
     
-    pub async fn retest_finding(&self, finding: &Finding, expect_fixed: bool) -> Result<RetestResult> {
+    pub async fn retest_finding(&self, finding: &Finding) -> Result<RetestResult> {
+        let expect_fixed = false;
         let status = if expect_fixed {
             self.verify_fix(finding).await?
         } else {
@@ -66,18 +61,32 @@ impl RetestAgent {
     }
     
     async fn verify_fix(&self, _finding: &Finding) -> Result<RetestStatus> {
+        // TODO: Re-execute the original payload and compare response
+        // For now, return Fixed as placeholder
         Ok(RetestStatus::Fixed)
     }
     
-    async fn verify_still_vulnerable(&self, _finding: &Finding) -> Result<RetestStatus> {
-        Ok(RetestStatus::StillVulnerable)
+    async fn verify_still_vulnerable(&self, finding: &Finding) -> Result<RetestStatus> {
+        let is_vulnerable = self.verify_still_vulnerable_real(finding).await?;
+        
+        if is_vulnerable {
+            Ok(RetestStatus::StillVulnerable)
+        } else {
+            Ok(RetestStatus::CannotReproduce)
+        }
     }
     
-    pub async fn bulk_retest(&self, findings: &[Finding], expect_fixed: bool) -> Vec<RetestResult> {
+    async fn verify_still_vulnerable_real(&self, _finding: &Finding) -> Result<bool> {
+        // TODO: Re-execute and check if still exploitable
+        // For now, return true as placeholder
+        Ok(true)
+    }
+    
+    pub async fn bulk_retest(&self, findings: &[Finding]) -> Vec<RetestResult> {
         let mut results = Vec::new();
         
         for finding in findings {
-            match self.retest_finding(finding, expect_fixed).await {
+            match self.retest_finding(finding).await {
                 Ok(result) => results.push(result),
                 Err(e) => {
                     results.push(RetestResult {
@@ -143,9 +152,9 @@ pub struct ClosureReport {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use strike_security::models::finding::{Target, HttpMethod};
-    use strike_security::models::vuln_class::VulnClass;
-    use strike_security::models::severity::Severity;
+    use crate::models::finding::{Target, HttpMethod};
+    use crate::models::vuln_class::VulnClass;
+    use crate::models::severity::Severity;
 
     fn create_test_finding() -> Finding {
         Finding {

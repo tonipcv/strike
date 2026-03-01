@@ -1,12 +1,12 @@
 [package]
 name = "strike-security"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
-authors = ["Strike Team"]
-description = "Evidence-first CLI security validation platform"
+authors = ["Strike Security Team"]
+description = "Evidence-first CLI security validation platform with AI-powered vulnerability detection"
 license-file = "LICENSE"
 repository = "https://github.com/xaseai/strike"
-keywords = ["security", "pentesting", "vulnerability", "cli", "validation"]
+keywords = ["security", "pentesting", "vulnerability", "scanner", "ai"]
 categories = ["command-line-utilities", "development-tools"]
 readme = "README.md"
 
@@ -19,7 +19,9 @@ name = "strike"
 path = "src/main.rs"
 
 [dependencies]
-tokio = { version = "1.41", features = ["full"] }
+tokio = { version = "1.35", features = ["full"] }
+tokio-util = "0.7"
+async-stream = "0.3"
 clap = { version = "4.5", features = ["derive", "env"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -55,6 +57,7 @@ tiktoken-rs = "0.5"
 handlebars = "6.0"
 petgraph = "0.6"
 chromiumoxide = { version = "0.7", features = ["tokio-runtime"], optional = true }
+printpdf = "0.7"
 
 [features]
 default = []
