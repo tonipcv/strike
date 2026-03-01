@@ -37,9 +37,8 @@ pub struct AuthAgent {
 impl AuthAgent {
     pub fn new() -> Self {
         Self {
-            http_client: HttpClient::new(),
+            http_client: HttpClient::new(50, 30).unwrap(),
             sessions: HashMap::new(),
-            http_client: reqwest::Client::new(),
         }
     }
 
