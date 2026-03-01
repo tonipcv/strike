@@ -52,7 +52,7 @@ impl AuthAgent {
                 
                 Ok(AuthResult {
                     success: true,
-                    session_token: Some(auth_header),
+                    session_token: Some(auth_header.clone()),
                     cookies: Vec::new(),
                     headers: vec![("Authorization".to_string(), auth_header)],
                 })
