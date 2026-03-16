@@ -1,0 +1,164 @@
+name: Web Application Security Scan
+description: Comprehensive web application vulnerability assessment
+version: 1.0
+author: Strike Security Team
+tags:
+  - web
+  - vulnerability
+  - owasp
+
+metadata:
+  priority: high
+  estimated_duration: 60
+  requires_confirmation: false
+  safe_mode: true
+
+config:
+  timeout: 3600
+  max_concurrent: 3
+  retry_on_failure: true
+  continue_on_error: false
+
+phases:
+  - name: crawling
+    description: Crawl web application to discover endpoints
+    tools:
+      - name: katana
+        args:
+          - "-depth"
+          - "3"
+          - "-js-crawl"
+          - "-form-extraction"
+      
+      - name: gospider
+        args:
+          - "-d"
+          - "3"
+          - "-c"
+          - "10"
+    
+    output:
+      save: true
+      format: json
+  
+  - name: vulnerability_scanning
+    description: Scan for common vulnerabilities
+    depends_on:
+      - crawling
+    
+    parallel: true
+    tools:
+      - name: nuclei
+        config:
+          templates:
+            - cves
+            - vulnerabilities
+            - misconfigurations
+            - exposures
+          severity: critical,high,medium
+          rate_limit: 150
+        timeout: 1800
+      
+      - name: nikto
+        args:
+          - "-Tuning"
+          - "x"
+        timeout: 900
+    
+    output:
+      save: true
+      format: json
+  
+  - name: ssl_tls_testing
+    description: Test SSL/TLS configuration
+    tools:
+      - name: testssl
+        args:
+          - "--fast"
+          - "--severity"
+          - "HIGH"
+    
+    output:
+      save: true
+      format: json
+  
+  - name: parameter_discovery
+    description: Discover hidden parameters
+    depends_on:
+      - crawling
+    
+    tools:
+      - name: arjun
+        config:
+          threads: 5
+          delay: 0
+      
+      - name: paramspider
+    
+    output:
+      save: true
+      format: json
+  
+  - name: analysis
+    description: AI-powered vulnerability analysis
+    depends_on:
+      - vulnerability_scanning
+      - ssl_tls_testing
+      - parameter_discovery
+    
+    llm_analysis:
+      enabled: true
+      model: gpt-4
+      temperature: 0.7
+      max_tokens: 4096
+      prompt: |
+        Analyze the web application security findings:
+        
+        1. Categorize vulnerabilities by OWASP Top 10
+        2. Assess risk and business impact
+        3. Identify exploitation chains
+        4. Provide detailed remediation steps
+        5. Prioritize fixes by severity and ease of exploitation
+      
+      context_sources:
+        - previous_phases
+        - tool_outputs
+
+output:
+  formats:
+    - json
+    - html
+    - pdf
+  directory: ./reports/web-scans
+  filename_template: "{target}-web-scan-{date}-{time}"
+  include_screenshots: true
+  include_raw_output: true
+
+notifications:
+  on_finding: true
+  on_completion: true
+  channels:
+    - slack
+    - email
+  
+  webhooks:
+    - url: https://hooks.slack.com/services/YOUR/WEBHOOK/URL
+      on: finding
+      severity:
+        - critical
+        - high
+      method: POST
+
+roe:
+  allowed_actions:
+    - recon
+    - vuln_scan
+    - crawl
+  
+  restricted_actions:
+    - exploit
+    - bruteforce
+  
+  rate_limit:
+    requests_per_second: 10
+    concurrent_scans: 3

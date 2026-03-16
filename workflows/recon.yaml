@@ -1,0 +1,138 @@
+name: Reconnaissance Workflow
+description: Comprehensive asset discovery and information gathering
+version: 1.0
+author: Strike Security Team
+tags:
+  - recon
+  - osint
+  - discovery
+
+metadata:
+  priority: medium
+  estimated_duration: 30
+  requires_confirmation: false
+  safe_mode: true
+
+config:
+  timeout: 1800
+  max_concurrent: 5
+  retry_on_failure: true
+  continue_on_error: true
+
+phases:
+  - name: subdomain_enumeration
+    description: Discover subdomains using multiple tools
+    tools:
+      - name: subfinder
+        args:
+          - "-all"
+          - "-recursive"
+      
+      - name: amass
+        args:
+          - "enum"
+          - "-passive"
+    
+    output:
+      save: true
+      format: json
+  
+  - name: live_host_detection
+    description: Identify live hosts from discovered subdomains
+    depends_on:
+      - subdomain_enumeration
+    
+    tools:
+      - name: httpx
+        args:
+          - "-status-code"
+          - "-tech-detect"
+          - "-title"
+          - "-content-length"
+      
+      - name: dnsx
+        args:
+          - "-a"
+          - "-cname"
+          - "-mx"
+    
+    output:
+      save: true
+      format: json
+  
+  - name: port_scanning
+    description: Scan common ports on live hosts
+    depends_on:
+      - live_host_detection
+    
+    tools:
+      - name: nmap
+        config:
+          scan_type: syn
+          ports: "80,443,8080,8443,3000,3306,5432,6379,27017"
+          timing: 4
+        timeout: 600
+    
+    output:
+      save: true
+      format: xml
+  
+  - name: technology_detection
+    description: Identify technologies and frameworks
+    depends_on:
+      - live_host_detection
+    
+    parallel: true
+    tools:
+      - name: whatweb
+        args:
+          - "-a"
+          - "3"
+      
+      - name: wafw00f
+        args:
+          - "-a"
+    
+    output:
+      save: true
+      format: json
+  
+  - name: analysis
+    description: AI-powered analysis of reconnaissance results
+    depends_on:
+      - subdomain_enumeration
+      - live_host_detection
+      - port_scanning
+      - technology_detection
+    
+    llm_analysis:
+      enabled: true
+      model: gpt-4
+      temperature: 0.7
+      prompt: |
+        Analyze the reconnaissance findings and provide:
+        1. Attack surface summary
+        2. Interesting targets for further testing
+        3. Technology stack analysis
+        4. Potential security concerns
+        5. Recommended next steps
+      
+      context_sources:
+        - previous_phases
+        - tool_outputs
+        - target_metadata
+
+output:
+  formats:
+    - json
+    - html
+    - markdown
+  directory: ./reports/recon
+  filename_template: "{target}-recon-{date}"
+  include_screenshots: false
+  include_raw_output: true
+
+notifications:
+  on_completion: true
+  channels:
+    - slack

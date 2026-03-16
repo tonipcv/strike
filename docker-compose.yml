@@ -1,0 +1,197 @@
+version: '3.8'
+
+services:
+  # Strike main service
+  strike:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: strike:latest
+    container_name: strike-scanner
+    user: "1000:1000"
+    environment:
+      # LLM Provider Configuration
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - OLLAMA_HOST=${OLLAMA_HOST:-http://ollama:11434}
+      
+      # Strike Configuration
+      - STRIKE_LOG_LEVEL=${STRIKE_LOG_LEVEL:-info}
+      - STRIKE_MAX_CONCURRENT_SCANS=${STRIKE_MAX_CONCURRENT_SCANS:-5}
+      - STRIKE_TIMEOUT=${STRIKE_TIMEOUT:-3600}
+      - STRIKE_SAFE_MODE=${STRIKE_SAFE_MODE:-true}
+      
+      # Tool Paths
+      - NMAP_PATH=/usr/bin/nmap
+      - MASSCAN_PATH=/usr/bin/masscan
+      - NUCLEI_PATH=/usr/local/bin/nuclei
+      - NIKTO_PATH=/usr/local/bin/nikto
+      - SQLMAP_PATH=/home/striker/venv/bin/sqlmap
+      - GOBUSTER_PATH=/usr/local/bin/gobuster
+      - FFUF_PATH=/usr/local/bin/ffuf
+      - SUBFINDER_PATH=/usr/local/bin/subfinder
+      - HTTPX_PATH=/usr/local/bin/httpx
+      - AMASS_PATH=/usr/local/bin/amass
+      - WPSCAN_PATH=/usr/local/bin/wpscan
+      - TESTSSL_PATH=/usr/local/bin/testssl
+      
+      # Database (if needed in future)
+      - DATABASE_URL=${DATABASE_URL:-}
+      
+      # Redis (if needed for caching)
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+      
+    volumes:
+      # Persistent configuration
+      - ./config:/home/striker/.strike:rw
+      # Custom workflows
+      - ./workflows:/home/striker/workflows:ro
+      # Scan reports output
+      - ./reports:/home/striker/reports:rw
+      # Nuclei templates (can be customized)
+      - nuclei-templates:/home/striker/nuclei-templates:rw
+      # Docker socket for container scanning (optional, use with caution)
+      # - /var/run/docker.sock:/var/run/docker.sock:ro
+    
+    networks:
+      - strike-network
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 8G
+        reservations:
+          cpus: '2.0'
+          memory: 4G
+    
+    # Restart policy
+    restart: unless-stopped
+    
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+    
+    # Read-only root filesystem (except mounted volumes)
+    read_only: false
+    
+    # Capabilities (minimal required)
+    cap_add:
+      - NET_RAW  # For nmap, masscan
+      - NET_ADMIN  # For network scanning
+    cap_drop:
+      - ALL
+    
+    # Command override (example)
+    # command: scan --target example.com --workflow recon
+
+  # Ollama for local LLM (optional)
+  ollama:
+    image: ollama/ollama:latest
+    container_name: strike-ollama
+    volumes:
+      - ollama-data:/root/.ollama
+    networks:
+      - strike-network
+    ports:
+      - "11434:11434"
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 8G
+        reservations:
+          cpus: '2.0'
+          memory: 4G
+    restart: unless-stopped
+    # Uncomment for GPU support
+    # runtime: nvidia
+    # environment:
+    #   - NVIDIA_VISIBLE_DEVICES=all
+
+  # Redis for caching and job queue (optional)
+  redis:
+    image: redis:7-alpine
+    container_name: strike-redis
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-strike-redis-pass}
+    volumes:
+      - redis-data:/data
+    networks:
+      - strike-network
+    ports:
+      - "6379:6379"
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  # PostgreSQL for scan history and results (optional)
+  postgres:
+    image: postgres:16-alpine
+    container_name: strike-postgres
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-strike}
+      - POSTGRES_USER=${POSTGRES_USER:-striker}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-strike-db-pass}
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - strike-network
+    ports:
+      - "5432:5432"
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U striker"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Web UI (future enhancement)
+  # strike-ui:
+  #   build:
+  #     context: ./ui
+  #     dockerfile: Dockerfile
+  #   container_name: strike-ui
+  #   environment:
+  #     - STRIKE_API_URL=http://strike:8080
+  #   ports:
+  #     - "3000:3000"
+  #   networks:
+  #     - strike-network
+  #   depends_on:
+  #     - strike
+  #   restart: unless-stopped
+
+networks:
+  strike-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+
+volumes:
+  nuclei-templates:
+    driver: local
+  ollama-data:
+    driver: local
+  redis-data:
+    driver: local
+  postgres-data:
+    driver: local

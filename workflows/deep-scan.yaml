@@ -1,0 +1,280 @@
+name: Deep Security Scan
+description: Comprehensive multi-phase security assessment
+version: 1.0
+author: Strike Security Team
+tags:
+  - comprehensive
+  - deep-scan
+  - pentest
+
+metadata:
+  priority: high
+  estimated_duration: 120
+  requires_confirmation: true
+  safe_mode: true
+
+config:
+  timeout: 7200
+  max_concurrent: 5
+  retry_on_failure: true
+  continue_on_error: true
+
+phases:
+  - name: reconnaissance
+    description: Comprehensive information gathering
+    tools:
+      - name: subfinder
+        args: ["-all", "-recursive"]
+      - name: amass
+        args: ["enum", "-passive"]
+      - name: httpx
+        args: ["-status-code", "-tech-detect", "-title"]
+      - name: nmap
+        config:
+          scan_type: syn
+          ports: "1-65535"
+          timing: 4
+        timeout: 3600
+    
+    output:
+      save: true
+      format: json
+  
+  - name: vulnerability_scanning
+    description: Identify security vulnerabilities
+    depends_on:
+      - reconnaissance
+    
+    parallel: true
+    tools:
+      - name: nuclei
+        config:
+          templates: [cves, vulnerabilities, misconfigurations, exposures, fuzzing]
+          severity: critical,high,medium,low
+          rate_limit: 150
+        timeout: 2400
+      
+      - name: nikto
+        args: ["-Tuning", "x"]
+        timeout: 1800
+      
+      - name: testssl
+        args: ["--fast", "--severity", "HIGH"]
+        timeout: 900
+    
+    output:
+      save: true
+      format: json
+  
+  - name: web_fuzzing
+    description: Fuzz web endpoints for hidden resources
+    depends_on:
+      - reconnaissance
+    
+    conditions:
+      - type: technology_detected
+        value: [web, http, https]
+    
+    tools:
+      - name: ffuf
+        config:
+          wordlist: common.txt
+          threads: 40
+          match_status: [200, 204, 301, 302, 307, 401, 403]
+        timeout: 1800
+      
+      - name: gobuster
+        args:
+          - "dir"
+          - "-t"
+          - "50"
+        timeout: 1800
+    
+    output:
+      save: true
+      format: json
+  
+  - name: cms_detection
+    description: Detect and scan CMS platforms
+    depends_on:
+      - vulnerability_scanning
+    
+    conditions:
+      - type: technology_detected
+        value: [WordPress, Joomla, Drupal]
+    
+    tools:
+      - name: wpscan
+        enabled: true
+        conditions:
+          - type: technology_detected
+            value: WordPress
+        config:
+          enumerate: "vp,vt,tt,cb,dbe,u,m"
+          plugins_detection: aggressive
+      
+      - name: cmseek
+        args: ["-v"]
+    
+    output:
+      save: true
+      format: json
+  
+  - name: exploitation
+    description: Controlled exploitation of identified vulnerabilities
+    depends_on:
+      - vulnerability_scanning
+      - web_fuzzing
+    
+    metadata:
+      requires_confirmation: true
+    
+    conditions:
+      - type: has_findings
+        severity: high
+      - type: safe_mode
+        value: false
+    
+    tools:
+      - name: sqlmap
+        enabled: false
+        config:
+          level: 3
+          risk: 2
+          threads: 5
+          batch: true
+        timeout: 3600
+      
+      - name: xsstrike
+        enabled: false
+        timeout: 1800
+    
+    output:
+      save: true
+      format: json
+  
+  - name: analysis
+    description: AI-powered comprehensive analysis
+    depends_on:
+      - reconnaissance
+      - vulnerability_scanning
+      - web_fuzzing
+      - cms_detection
+    
+    llm_analysis:
+      enabled: true
+      models:
+        - provider: openai
+          model: gpt-4
+          weight: 0.5
+        - provider: anthropic
+          model: claude-3-opus
+          weight: 0.5
+      
+      consensus_required: true
+      temperature: 0.7
+      max_tokens: 8000
+      
+      prompt: |
+        Perform a comprehensive security analysis:
+        
+        1. Executive Summary
+           - Overall security posture
+           - Critical findings summary
+           - Risk assessment
+        
+        2. Detailed Findings
+           - Categorize by OWASP Top 10
+           - Severity and impact analysis
+           - Exploitation likelihood
+        
+        3. Attack Chains
+           - Identify potential attack paths
+           - Multi-step exploitation scenarios
+           - Privilege escalation opportunities
+        
+        4. Remediation Plan
+           - Prioritized fix list
+           - Detailed remediation steps
+           - Quick wins vs long-term fixes
+        
+        5. Compliance Impact
+           - GDPR implications
+           - PCI-DSS concerns
+           - SOC 2 requirements
+      
+      context_sources:
+        - previous_phases
+        - tool_outputs
+        - target_metadata
+
+output:
+  formats:
+    - json
+    - html
+    - pdf
+    - markdown
+  directory: ./reports/deep-scans
+  filename_template: "{target}-deep-scan-{date}-{time}"
+  include_screenshots: true
+  include_raw_output: true
+  
+  fail_on:
+    severity: critical
+    count: 1
+
+notifications:
+  on_start: true
+  on_finding: true
+  on_completion: true
+  on_error: true
+  
+  channels:
+    - slack
+    - email
+    - discord
+  
+  webhooks:
+    - url: https://hooks.slack.com/services/YOUR/WEBHOOK/URL
+      on: finding
+      severity: [critical, high]
+      method: POST
+      headers:
+        Content-Type: application/json
+    
+    - url: https://api.example.com/security-events
+      on: completion
+      method: POST
+      headers:
+        Authorization: Bearer ${API_TOKEN}
+
+roe:
+  scope:
+    - "*.example.com"
+    - "192.168.1.0/24"
+  
+  excluded:
+    - "admin.example.com"
+    - "192.168.1.1"
+  
+  allowed_actions:
+    - recon
+    - vuln_scan
+    - port_scan
+    - crawl
+    - fuzz
+  
+  restricted_actions:
+    - exploit
+    - bruteforce
+    - dos_test
+  
+  rate_limit:
+    requests_per_second: 10
+    concurrent_scans: 5
+  
+  allowed_times:
+    - start: "09:00"
+      end: "17:00"
+      timezone: "UTC"
+      days: ["Mon", "Tue", "Wed", "Thu", "Fri"]
