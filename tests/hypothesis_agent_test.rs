@@ -3,18 +3,16 @@ use strike_security::agents::hypothesis::{
 };
 use strike_security::llm::{
     prompt::EndpointInfo,
-    router::{LlmRouter, RouterConfig},
+    router::LlmRouter,
 };
 use strike_security::models::vuln_class::VulnClass;
 use std::sync::Arc;
 
 #[tokio::test]
 async fn test_hypothesis_agent_creation() {
-    let config = RouterConfig::default();
-    if let Ok(router) = LlmRouter::new(config) {
+    let router = LlmRouter::for_tests();
         let agent = HypothesisAgent::new(Arc::new(router), Some(50));
         assert!(agent.is_ok());
-    }
 }
 
 #[tokio::test]
@@ -95,8 +93,7 @@ async fn test_session_context_creation() {
 
 #[tokio::test]
 async fn test_hypothesis_deduplication() {
-    let config = RouterConfig::default();
-    if let Ok(router) = LlmRouter::new(config) {
+    let router = LlmRouter::for_tests();
         if let Ok(agent) = HypothesisAgent::new(Arc::new(router), Some(50)) {
             let hypotheses = vec![
                 Hypothesis {
@@ -143,13 +140,10 @@ async fn test_hypothesis_deduplication() {
             let deduplicated = agent.deduplicate_hypotheses(hypotheses);
             assert_eq!(deduplicated.len(), 2);
         }
-    }
-}
 
 #[tokio::test]
 async fn test_hypothesis_ranking_by_severity() {
-    let config = RouterConfig::default();
-    if let Ok(router) = LlmRouter::new(config) {
+    let router = LlmRouter::for_tests();
         if let Ok(agent) = HypothesisAgent::new(Arc::new(router), Some(50)) {
             let hypotheses = vec![
                 Hypothesis {
@@ -198,13 +192,11 @@ async fn test_hypothesis_ranking_by_severity() {
             assert_eq!(ranked[0].id, "critical");
             assert_eq!(ranked[2].id, "low");
         }
-    }
 }
 
 #[tokio::test]
 async fn test_max_hypotheses_limit() {
-    let config = RouterConfig::default();
-    if let Ok(router) = LlmRouter::new(config) {
+    let router = LlmRouter::for_tests();
         let agent = HypothesisAgent::new(Arc::new(router), Some(5));
         assert!(agent.is_ok());
         

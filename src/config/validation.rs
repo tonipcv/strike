@@ -1,5 +1,5 @@
 use anyhow::{bail, Context, Result};
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+use std::net::IpAddr;
 use url::Url;
 
 pub struct InputValidator;

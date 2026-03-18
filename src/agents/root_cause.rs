@@ -103,7 +103,7 @@ impl RootCauseAgent {
         Ok(analysis)
     }
     
-    async fn get_code_context(&self, repo_path: &str, finding: &Finding) -> Result<Option<String>> {
+    async fn get_code_context(&self, _repo_path: &str, finding: &Finding) -> Result<Option<String>> {
         // Implement real code analysis
         let mut analysis = String::new();
         
@@ -220,14 +220,12 @@ mod tests {
     
     #[test]
     fn test_root_cause_agent_creation() {
-        let config = RouterConfig::default();
-        if let Ok(router) = LlmRouter::new(config) {
-            let agent = RootCauseAgent::new(
-                Arc::new(router),
-                AnalysisMode::BlackBox,
-            );
-            assert!(agent.is_ok());
-        }
+        let router = LlmRouter::test_router();
+        let agent = RootCauseAgent::new(
+            Arc::new(router),
+            AnalysisMode::BlackBox,
+        );
+        assert!(agent.is_ok());
     }
     
     #[test]

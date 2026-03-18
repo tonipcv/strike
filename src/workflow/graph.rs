@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::visit::Topo;
 use std::collections::HashMap;

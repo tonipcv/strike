@@ -224,7 +224,7 @@ impl WorkflowEngine {
     
     pub async fn get_next_phases(&self) -> Result<Vec<WorkflowPhase>> {
         let state = self.state.read().await;
-        let completed_phases = state.get_completed_phases();
+        let _completed_phases = state.get_completed_phases();
         
         let mut next_phases = Vec::new();
         

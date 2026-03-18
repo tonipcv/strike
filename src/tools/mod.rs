@@ -8,10 +8,12 @@ pub mod dns_resolver;
 pub mod port_scanner;
 
 pub use http_client::*;
-pub use browser::*;
 pub use api_fuzzer::*;
 pub use websocket::*;
 pub use secret_scanner::*;
-pub use traffic_replayer::*;
 pub use dns_resolver::*;
 pub use port_scanner::*;
+
+// Re-export only specific items to avoid ambiguous names between modules
+pub use browser::{BrowserDriver, Cookie, PageSnapshot};
+pub use traffic_replayer::{ReplayResult, ResponseDiff, RecordedRequest, RecordedResponse, TrafficRecord, TrafficReplayer, MutationStrategy};

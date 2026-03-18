@@ -151,6 +151,24 @@ impl FindingRepository {
             .map(|row| self.row_to_finding(row))
             .collect()
     }
+    
+    pub async fn list_all(&self) -> Result<Vec<Finding>> {
+        let rows = sqlx::query(
+            r#"
+            SELECT id, run_id, timestamp, title, vuln_class, severity, cvss_v4_score,
+                   status, target, evidence, root_cause, remediation, environment,
+                   authorization, retest_history, human_review
+            FROM findings
+            ORDER BY timestamp DESC
+            "#,
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        rows.into_iter()
+            .map(|row| self.row_to_finding(row))
+            .collect()
+    }
 
     fn row_to_finding(&self, row: sqlx::sqlite::SqliteRow) -> Result<Finding> {
         use sqlx::Row;
@@ -160,6 +178,7 @@ impl FindingRepository {
             run_id: Uuid::parse_str(row.get("run_id"))?,
             timestamp: chrono::DateTime::parse_from_rfc3339(row.get("timestamp"))?.with_timezone(&chrono::Utc),
             title: row.get("title"),
+            description: row.try_get("description").unwrap_or_else(|_| String::new()),
             vuln_class: serde_json::from_str(row.get("vuln_class"))?,
             severity: match row.get::<&str, _>("severity") {
                 "critical" => Severity::Critical,
@@ -168,6 +187,7 @@ impl FindingRepository {
                 "low" => Severity::Low,
                 _ => Severity::Info,
             },
+            confidence: row.try_get("confidence").unwrap_or(0.0),
             cvss_v4_score: serde_json::from_str(row.get("cvss_v4_score"))?,
             status: match row.get::<&str, _>("status") {
                 "confirmed" => FindingStatus::Confirmed,

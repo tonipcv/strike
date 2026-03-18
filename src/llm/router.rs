@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -36,7 +36,11 @@ pub struct LlmRouter {
 }
 
 impl LlmRouter {
-    pub fn new(config: RouterConfig) -> Result<Self> {
+    pub async fn new() -> Result<Self> {
+        Self::with_config(RouterConfig::default()).await
+    }
+    
+    pub async fn with_config(config: RouterConfig) -> Result<Self> {
         let anthropic = AnthropicProvider::new(None).ok().map(Arc::new);
         let openai = OpenAiProvider::new(None).ok().map(Arc::new);
         let ollama = OllamaProvider::new(None, None).ok().map(Arc::new);
@@ -127,6 +131,28 @@ impl LlmRouter {
         let remaining = self.config.monthly_budget_usd - self.config.current_spend_usd;
         let percentage = (self.config.current_spend_usd / self.config.monthly_budget_usd) * 100.0;
         (self.config.current_spend_usd, remaining, percentage)
+    }
+
+    // Public helper for tests and offline scenarios where providers are not configured
+    pub fn for_tests() -> Self {
+        Self {
+            anthropic: None,
+            openai: None,
+            ollama: None,
+            config: RouterConfig::default(),
+        }
+    }
+}
+
+#[cfg(test)]
+impl LlmRouter {
+    pub fn test_router() -> Self {
+        Self {
+            anthropic: None,
+            openai: None,
+            ollama: None,
+            config: RouterConfig::default(),
+        }
     }
 }
 

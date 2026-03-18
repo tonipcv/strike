@@ -1,10 +1,9 @@
 use anyhow::{Context, Result};
 use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
 use std::env;
 
 use super::provider::{LlmPrompt, LlmProvider, LlmResponse};
-use super::retry::{RetryConfig, RetryStrategy};
+use super::retry::RetryStrategy;
 use super::cache::{CacheConfig, LlmCache};
 
 #[derive(Clone)]

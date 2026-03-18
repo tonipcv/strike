@@ -1,4 +1,4 @@
-use reqwest::{Client, Method, Request, Response};
+use reqwest::{Client, Response, Method};
 use anyhow::Result;
 use std::time::Duration;
 use std::collections::HashMap;

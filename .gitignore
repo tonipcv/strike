@@ -1,1 +1,38 @@
-/target
+# Rust
+target/
+Cargo.lock
+**/*.rs.bk
+*.pdb
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Strike specific
+.strike/
+*.strike.log
+
+# Test artifacts
+*.profraw
+coverage/
+tarpaulin-report.html
+
+# Documentation build
+docs/_build/
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# OS files
+Thumbs.db

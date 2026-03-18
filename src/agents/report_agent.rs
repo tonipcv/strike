@@ -8,6 +8,15 @@ impl ReportAgent {
     pub fn new() -> Self {
         Self
     }
+    
+    pub async fn generate_report(&self, findings: &[Finding], run_state: &RunState, format: &str) -> Result<String> {
+        match format {
+            "json" => self.generate_json_report(findings, run_state),
+            "markdown" | "md" => self.generate_markdown_report(findings, run_state),
+            "sarif" => self.generate_sarif_report(findings, run_state),
+            _ => self.generate_json_report(findings, run_state),
+        }
+    }
 
     pub fn generate_json_report(&self, findings: &[Finding], run_state: &RunState) -> Result<String> {
         let report = serde_json::json!({
@@ -76,7 +85,7 @@ impl ReportAgent {
         Ok(md)
     }
 
-    pub fn generate_sarif_report(&self, findings: &[Finding], run_state: &RunState) -> Result<String> {
+    pub fn generate_sarif_report(&self, findings: &[Finding], _run_state: &RunState) -> Result<String> {
         let mut rules = Vec::new();
         let mut results = Vec::new();
 

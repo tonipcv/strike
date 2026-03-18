@@ -1,6 +1,5 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use chrono::DateTime;
 
 use crate::models::finding::Finding;
 use crate::tools::http_client::HttpClient;

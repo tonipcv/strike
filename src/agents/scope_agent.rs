@@ -54,4 +54,16 @@ impl ScopeAgent {
 
         Ok(true)
     }
+    
+    pub async fn analyze_scope(&self, target: &str) -> Result<Vec<String>> {
+        self.validate_target(target)?;
+        
+        let mut scope_items = Vec::new();
+        
+        for authorized_target in &self.roe.scope.targets {
+            scope_items.push(authorized_target.clone());
+        }
+        
+        Ok(scope_items)
+    }
 }

@@ -1,6 +1,8 @@
 use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
+use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
+use futures_util::{StreamExt, SinkExt};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WebSocketConfig {
@@ -41,6 +43,42 @@ impl WebSocketMessage {
     pub fn ping() -> Self { Self::Ping }
     pub fn pong() -> Self { Self::Pong }
     pub fn close<S: Into<String>>(code: u16, reason: S) -> Self { Self::Close { code, reason: reason.into() } }
+    
+    fn to_tungstenite(&self) -> Message {
+        match self {
+            Self::Text(s) => Message::Text(s.clone()),
+            Self::Binary(b) => Message::Binary(b.clone()),
+            Self::Ping => Message::Ping(vec![]),
+            Self::Pong => Message::Pong(vec![]),
+            Self::Close { code, reason } => Message::Close(Some(tokio_tungstenite::tungstenite::protocol::CloseFrame {
+                code: (*code).into(),
+                reason: std::borrow::Cow::Owned(reason.clone()),
+            })),
+        }
+    }
+    
+    fn from_tungstenite(msg: Message) -> Option<Self> {
+        match msg {
+            Message::Text(s) => Some(Self::Text(s)),
+            Message::Binary(b) => Some(Self::Binary(b)),
+            Message::Ping(_) => Some(Self::Ping),
+            Message::Pong(_) => Some(Self::Pong),
+            Message::Close(frame) => {
+                if let Some(f) = frame {
+                    Some(Self::Close {
+                        code: f.code.into(),
+                        reason: f.reason.to_string(),
+                    })
+                } else {
+                    Some(Self::Close {
+                        code: Self::NORMAL_CLOSURE,
+                        reason: String::new(),
+                    })
+                }
+            }
+            Message::Frame(_) => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
@@ -71,22 +109,67 @@ impl WebSocketTester {
     pub async fn connect(&self, url: &str) -> Result<WebSocketConnection> {
         self.validate_url(url)?;
         
+        let (ws_stream, _) = tokio::time::timeout(
+            Duration::from_secs(self.config.timeout_seconds),
+            connect_async(url)
+        ).await??;
+        
+        let (write, read) = ws_stream.split();
+        
         Ok(WebSocketConnection {
             url: url.to_string(),
             config: self.config.clone(),
-            connected: false,
+            connected: true,
+            write: Some(write),
+            read: Some(read),
         })
     }
     
-    pub async fn send_message(&self, _connection: &mut WebSocketConnection, _message: WebSocketMessage) -> Result<()> {
+    pub async fn send_message(&self, connection: &mut WebSocketConnection, message: WebSocketMessage) -> Result<()> {
+        if !connection.connected {
+            return Err(anyhow!("WebSocket not connected"));
+        }
+        
+        if let Some(write) = &mut connection.write {
+            let msg = message.to_tungstenite();
+            write.send(msg).await?;
+        } else {
+            return Err(anyhow!("WebSocket write stream not available"));
+        }
+        
         Ok(())
     }
     
-    pub async fn receive_message(&self, _connection: &mut WebSocketConnection) -> Result<Option<WebSocketMessage>> {
-        Ok(None)
+    pub async fn receive_message(&self, connection: &mut WebSocketConnection) -> Result<Option<WebSocketMessage>> {
+        if !connection.connected {
+            return Err(anyhow!("WebSocket not connected"));
+        }
+        
+        if let Some(read) = &mut connection.read {
+            let timeout_duration = Duration::from_secs(self.config.timeout_seconds);
+            
+            match tokio::time::timeout(timeout_duration, read.next()).await {
+                Ok(Some(Ok(msg))) => Ok(WebSocketMessage::from_tungstenite(msg)),
+                Ok(Some(Err(e))) => Err(anyhow!("WebSocket error: {}", e)),
+                Ok(None) => {
+                    connection.connected = false;
+                    Ok(None)
+                }
+                Err(_) => Err(anyhow!("Receive timeout")),
+            }
+        } else {
+            Err(anyhow!("WebSocket read stream not available"))
+        }
     }
     
-    pub async fn close(&self, _connection: &mut WebSocketConnection) -> Result<()> {
+    pub async fn close(&self, connection: &mut WebSocketConnection) -> Result<()> {
+        if connection.connected {
+            self.send_message(connection, WebSocketMessage::close(
+                WebSocketMessage::NORMAL_CLOSURE,
+                "Closing connection"
+            )).await?;
+            connection.connected = false;
+        }
         Ok(())
     }
 }
@@ -95,6 +178,13 @@ pub struct WebSocketConnection {
     pub url: String,
     pub config: WebSocketConfig,
     pub connected: bool,
+    write: Option<futures_util::stream::SplitSink<
+        tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>,
+        Message
+    >>,
+    read: Option<futures_util::stream::SplitStream<
+        tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>
+    >>,
 }
 
 #[cfg(test)]

@@ -57,7 +57,7 @@ impl RemediationAgent {
     pub async fn generate_remediation(
         &self,
         finding: &Finding,
-        root_cause: &RootCauseAnalysis,
+        root_cause: Option<&RootCauseAnalysis>,
     ) -> Result<RemediationGuidance> {
         let finding_context = FindingContext {
             title: finding.title.clone(),
@@ -69,13 +69,17 @@ impl RemediationAgent {
             evidence: "Evidence data".to_string(),
         };
         
-        let root_cause_text = format!(
-            "Root cause: {}\nCWE: {}\nASVS: {}\nFix category: {:?}",
-            root_cause.root_cause_pattern,
-            root_cause.cwe_id,
-            root_cause.asvs_control,
-            root_cause.fix_category
-        );
+        let root_cause_text = if let Some(rc) = root_cause {
+            format!(
+                "Root cause: {}\nCWE: {}\nASVS: {}\nFix category: {:?}",
+                rc.root_cause_pattern,
+                rc.cwe_id,
+                rc.asvs_control,
+                rc.fix_category
+            )
+        } else {
+            format!("Vulnerability class: {:?}", finding.vuln_class)
+        };
         
         let prompt_text = self.prompt_template.render_remediation_generation(
             &finding_context,
@@ -197,11 +201,9 @@ mod tests {
     
     #[test]
     fn test_remediation_agent_creation() {
-        let config = RouterConfig::default();
-        if let Ok(router) = LlmRouter::new(config) {
-            let agent = RemediationAgent::new(Arc::new(router));
-            assert!(agent.is_ok());
-        }
+        let router = LlmRouter::test_router();
+        let agent = RemediationAgent::new(Arc::new(router));
+        assert!(agent.is_ok());
     }
     
     #[test]

@@ -2,7 +2,6 @@ use anyhow::{Context, Result};
 use handlebars::Handlebars;
 use serde::Serialize;
 use serde_json::json;
-use std::collections::HashMap;
 
 #[derive(Clone)]
 pub struct PromptTemplate {

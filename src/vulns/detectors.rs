@@ -278,3 +278,42 @@ impl VulnDetector {
         }
     }
 }
+
+pub struct VulnDetectors {
+    detectors: Vec<Box<dyn VulnerabilityDetector>>,
+}
+
+impl VulnDetectors {
+    pub fn new() -> Self {
+        let detectors: Vec<Box<dyn VulnerabilityDetector>> = vec![
+            Box::new(SqlInjectionDetector::new()),
+            Box::new(XssDetector::new()),
+            Box::new(SsrfDetector::new()),
+        ];
+        
+        Self { detectors }
+    }
+    
+    pub async fn detect_all(&self, target: String) -> Result<Vec<DetectionResult>> {
+        let mut results = Vec::new();
+        
+        for detector in &self.detectors {
+            for payload in detector.get_payloads() {
+                match detector.detect(target.clone(), payload).await {
+                    Ok(result) => {
+                        if result.vulnerable {
+                            results.push(result);
+                        }
+                    }
+                    Err(_) => continue,
+                }
+            }
+        }
+        
+        Ok(results)
+    }
+    
+    pub fn get_detector_count(&self) -> usize {
+        self.detectors.len()
+    }
+}

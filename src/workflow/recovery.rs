@@ -1,8 +1,7 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
-use std::collections::HashMap;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -219,7 +218,7 @@ impl RecoveryManager {
         
         let actions: Vec<CompensatingAction> = rows
             .into_iter()
-            .filter_map(|(id, run_id, phase, action_type, payload, created_at, executed_at, status)| {
+            .filter_map(|(id, _run_id, phase, action_type, payload, created_at, executed_at, status)| {
                 let payload: serde_json::Value = serde_json::from_str(&payload).ok()?;
                 let status: CompensationStatus = serde_json::from_str(&status).ok()?;
                 let created_at = DateTime::parse_from_rfc3339(&created_at).ok()?.with_timezone(&Utc);
@@ -355,7 +354,7 @@ impl RecoveryManager {
         .fetch_optional(&self.pool)
         .await?;
         
-        if let Some((id, run_id, phase, error, state_snapshot, retry_count, created_at, last_retry_at, resolved)) = entry {
+        if let Some((_id, _run_id, _phase, _error, _state_snapshot, retry_count, _created_at, _last_retry_at, _resolved)) = entry {
             if retry_count >= self.max_retries as i32 {
                 return Ok(false);
             }

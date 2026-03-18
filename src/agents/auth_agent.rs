@@ -1,4 +1,4 @@
-use anyhow::{Result, Context};
+use anyhow::Result;
 use crate::tools::HttpClient;
 use std::collections::HashMap;
 use serde_json::from_str;
@@ -77,7 +77,7 @@ impl AuthAgent {
                     headers: vec![(header_name.clone(), key.clone())],
                 })
             }
-            AuthCredentials::OAuth2 { client_id, client_secret, token_url, scope } => {
+            AuthCredentials::OAuth2 { client_id, client_secret, token_url, scope: _ } => {
                 // Implement OAuth2 client credentials flow
                 let body = format!("grant_type=client_credentials&client_id={}&client_secret={}", client_id, client_secret);
                 let token_response = self.http_client.post(&token_url, Some(body)).await?;

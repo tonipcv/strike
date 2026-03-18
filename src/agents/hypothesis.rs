@@ -219,7 +219,6 @@ impl HypothesisAgent {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::llm::router::RouterConfig;
 
     #[test]
     fn test_endpoint_graph_chunking() {
@@ -249,8 +248,8 @@ mod tests {
     
     #[test]
     fn test_hypothesis_deduplication() {
-        let config = RouterConfig::default();
-        if let Ok(router) = LlmRouter::new(config) {
+        let router = LlmRouter::test_router();
+        {
             let agent = HypothesisAgent::new(Arc::new(router), Some(50)).unwrap();
             
             let hypotheses = vec![
@@ -289,8 +288,8 @@ mod tests {
     
     #[test]
     fn test_hypothesis_ranking() {
-        let config = RouterConfig::default();
-        if let Ok(router) = LlmRouter::new(config) {
+        let router = LlmRouter::test_router();
+        {
             let agent = HypothesisAgent::new(Arc::new(router), Some(50)).unwrap();
             
             let hypotheses = vec![

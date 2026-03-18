@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 #[cfg(feature = "browser")]
@@ -113,18 +113,113 @@ impl BrowserDriver {
         })
     }
     
+    #[cfg(feature = "browser")]
+    pub async fn click(&self, selector: &str) -> Result<()> {
+        if let Some(browser) = &self.browser {
+            let page = browser.new_page("about:blank")
+                .await
+                .context("Failed to create new page")?;
+            
+            let element = page.find_element(selector)
+                .await
+                .context("Failed to find element")?;
+            
+            element.click()
+                .await
+                .context("Failed to click element")?;
+        }
+        Ok(())
+    }
+    
+    #[cfg(not(feature = "browser"))]
     pub async fn click(&self, _selector: &str) -> Result<()> {
         Ok(())
     }
     
+    #[cfg(feature = "browser")]
+    pub async fn type_text(&self, selector: &str, text: &str) -> Result<()> {
+        if let Some(browser) = &self.browser {
+            let page = browser.new_page("about:blank")
+                .await
+                .context("Failed to create new page")?;
+            
+            let element = page.find_element(selector)
+                .await
+                .context("Failed to find element")?;
+            
+            element.click()
+                .await
+                .context("Failed to focus element")?;
+            
+            element.type_str(text)
+                .await
+                .context("Failed to type text")?;
+        }
+        Ok(())
+    }
+    
+    #[cfg(not(feature = "browser"))]
     pub async fn type_text(&self, _selector: &str, _text: &str) -> Result<()> {
         Ok(())
     }
     
+    #[cfg(feature = "browser")]
+    pub async fn get_cookies(&self) -> Result<Vec<Cookie>> {
+        if let Some(browser) = &self.browser {
+            let page = browser.new_page("about:blank")
+                .await
+                .context("Failed to create new page")?;
+            
+            let cookies = page.get_cookies()
+                .await
+                .context("Failed to get cookies")?;
+            
+            let converted_cookies = cookies.iter().map(|c| Cookie {
+                name: c.name.clone(),
+                value: c.value.clone(),
+                domain: c.domain.clone().unwrap_or_default(),
+                path: c.path.clone().unwrap_or_else(|| "/".to_string()),
+                secure: c.secure.unwrap_or(false),
+                http_only: c.http_only.unwrap_or(false),
+            }).collect();
+            
+            return Ok(converted_cookies);
+        }
+        Ok(vec![])
+    }
+    
+    #[cfg(not(feature = "browser"))]
     pub async fn get_cookies(&self) -> Result<Vec<Cookie>> {
         Ok(vec![])
     }
     
+    #[cfg(feature = "browser")]
+    pub async fn set_cookies(&self, cookies: Vec<Cookie>) -> Result<()> {
+        if let Some(browser) = &self.browser {
+            let page = browser.new_page("about:blank")
+                .await
+                .context("Failed to create new page")?;
+            
+            for cookie in cookies {
+                let chrome_cookie = chromiumoxide::cdp::browser_protocol::network::CookieParam {
+                    name: cookie.name,
+                    value: cookie.value,
+                    domain: Some(cookie.domain),
+                    path: Some(cookie.path),
+                    secure: Some(cookie.secure),
+                    http_only: Some(cookie.http_only),
+                    ..Default::default()
+                };
+                
+                page.set_cookie(chrome_cookie)
+                    .await
+                    .context("Failed to set cookie")?;
+            }
+        }
+        Ok(())
+    }
+    
+    #[cfg(not(feature = "browser"))]
     pub async fn set_cookies(&self, _cookies: Vec<Cookie>) -> Result<()> {
         Ok(())
     }

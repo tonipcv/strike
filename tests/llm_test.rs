@@ -30,16 +30,13 @@ async fn test_router_config_default() {
 
 #[tokio::test]
 async fn test_router_creation() {
-    let config = RouterConfig::default();
-    let router = LlmRouter::new(config);
-    
+    let router = LlmRouter::new().await;
     assert!(router.is_ok() || router.is_err());
 }
 
 #[tokio::test]
 async fn test_budget_tracking() {
-    let config = RouterConfig::default();
-    if let Ok(mut router) = LlmRouter::new(config) {
+    if let Ok(mut router) = LlmRouter::new().await {
         router.update_spend(10.0);
         let (spent, remaining, percentage) = router.get_budget_status();
         

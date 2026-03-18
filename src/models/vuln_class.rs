@@ -45,6 +45,50 @@ pub enum VulnClass {
 }
 
 impl VulnClass {
+    pub fn from_str(s: &str) -> Result<Self, String> {
+        match s.to_uppercase().as_str() {
+            "IDOR" => Ok(Self::Idor),
+            "BOLA" => Ok(Self::Bola),
+            "BFLA" => Ok(Self::Bfla),
+            "PRIVILEGE_ESCALATION" | "PRIVILEGEESCALATION" => Ok(Self::PrivilegeEscalation),
+            "PATH_TRAVERSAL" | "PATHTRAVERSAL" => Ok(Self::PathTraversal),
+            "MASS_ASSIGNMENT" | "MASSASSIGNMENT" => Ok(Self::MassAssignment),
+            "SQL_INJECTION" | "SQLINJECTION" | "SQLI" => Ok(Self::SqlInjection),
+            "NOSQL_INJECTION" | "NOSQLINJECTION" => Ok(Self::NoSqlInjection),
+            "LDAP_INJECTION" | "LDAPINJECTION" => Ok(Self::LdapInjection),
+            "OS_COMMAND_INJECTION" | "OSCOMMANDINJECTION" | "COMMAND_INJECTION" => Ok(Self::OsCommandInjection),
+            "SSTI" => Ok(Self::Ssti),
+            "XPATH_INJECTION" | "XPATHINJECTION" => Ok(Self::XPathInjection),
+            "BROKEN_AUTHENTICATION" | "BROKENAUTHENTICATION" => Ok(Self::BrokenAuthentication),
+            "SESSION_FIXATION" | "SESSIONFIXATION" => Ok(Self::SessionFixation),
+            "TOKEN_FORGERY" | "TOKENFORGERY" => Ok(Self::TokenForgery),
+            "JWT_WEAKNESS" | "JWTWEAKNESS" => Ok(Self::JwtWeakness),
+            "OAUTH2_MISCONFIGURATION" | "OAUTH2MISCONFIGURATION" => Ok(Self::OAuth2Misconfiguration),
+            "TWO_FACTOR_BYPASS" | "TWOFACTORBYPASS" => Ok(Self::TwoFactorBypass),
+            "XSS_REFLECTED" | "XSSREFLECTED" | "XSS" => Ok(Self::XssReflected),
+            "XSS_STORED" | "XSSSTORED" => Ok(Self::XssStored),
+            "XSS_DOM" | "XSSDOM" => Ok(Self::XssDom),
+            "CSRF" => Ok(Self::Csrf),
+            "CLICKJACKING" => Ok(Self::Clickjacking),
+            "OPEN_REDIRECT" | "OPENREDIRECT" => Ok(Self::OpenRedirect),
+            "SSRF" => Ok(Self::Ssrf),
+            "XXE" => Ok(Self::Xxe),
+            "DESERIALIZATION" => Ok(Self::Deserialization),
+            "FILE_UPLOAD_ABUSE" | "FILEUPLOADABUSE" => Ok(Self::FileUploadAbuse),
+            "RACE_CONDITION" | "RACECONDITION" => Ok(Self::RaceCondition),
+            "MASS_DATA_EXPOSURE" | "MASSDATAEXPOSURE" => Ok(Self::MassDataExposure),
+            "UNRESTRICTED_RESOURCE_CONSUMPTION" | "UNRESTRICTEDRESOURCECONSUMPTION" => Ok(Self::UnrestrictedResourceConsumption),
+            "SECURITY_MISCONFIGURATION" | "SECURITYMISCONFIGURATION" => Ok(Self::SecurityMisconfiguration),
+            "IMPROPER_ASSET_MANAGEMENT" | "IMPROPERASSETMANAGEMENT" => Ok(Self::ImproperAssetManagement),
+            "WEAK_TLS" | "WEAKTLS" => Ok(Self::WeakTls),
+            "INSECURE_HEADERS" | "INSECUREHEADERS" => Ok(Self::InsecureHeaders),
+            "DEFAULT_CREDENTIALS" | "DEFAULTCREDENTIALS" => Ok(Self::DefaultCredentials),
+            "SENSITIVE_DATA_EXPOSURE" | "SENSITIVEDATAEXPOSURE" => Ok(Self::SensitiveDataExposure),
+            "VERBOSE_ERROR_MESSAGES" | "VERBOSEERRORMESSAGES" => Ok(Self::VerboseErrorMessages),
+            _ => Err(format!("Unknown vulnerability class: {}", s)),
+        }
+    }
+    
     pub fn category(&self) -> VulnCategory {
         match self {
             Self::Idor | Self::Bola | Self::Bfla | Self::PrivilegeEscalation 

@@ -1,6 +1,5 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HtmlReport {
@@ -193,7 +192,7 @@ impl PdfExporter {
         
         let mut y_position = Mm(270.0);
         let left_margin = Mm(20.0);
-        let right_margin = Mm(190.0);
+        let _right_margin = Mm(190.0);
         
         current_layer.use_text(&report.title, 24.0, left_margin, y_position, &font_bold);
         y_position -= Mm(10.0);
@@ -230,7 +229,7 @@ impl PdfExporter {
         for (idx, finding) in report.findings.iter().enumerate() {
             if y_position < Mm(30.0) {
                 let (new_page, new_layer) = doc.add_page(Mm(210.0), Mm(297.0), "Layer 1");
-                let current_layer = doc.get_page(new_page).get_layer(new_layer);
+                let _current_layer = doc.get_page(new_page).get_layer(new_layer);
                 y_position = Mm(270.0);
             }
             

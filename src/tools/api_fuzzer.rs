@@ -1,4 +1,3 @@
-use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -231,7 +230,7 @@ impl ApiFuzzer {
         requests
     }
     
-    fn generate_mutation_attack(&self, field_name: &str, field: &Value) -> Vec<FuzzRequest> {
+    fn generate_mutation_attack(&self, field_name: &str, _field: &Value) -> Vec<FuzzRequest> {
         let mut requests = Vec::new();
         
         let malicious_inputs = vec![

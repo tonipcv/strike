@@ -1,5 +1,5 @@
 use strike_security::agents::hypothesis::{Hypothesis, HypothesisAgent};
-use strike_security::llm::router::{LlmRouter, RouterConfig};
+use strike_security::llm::router::LlmRouter;
 use std::sync::Arc;
 
 #[tokio::test]
@@ -25,18 +25,15 @@ async fn test_hypothesis_creation() {
 
 #[tokio::test]
 async fn test_hypothesis_agent_creation() {
-    let config = RouterConfig::default();
-    if let Ok(router) = LlmRouter::new(config) {
-        let agent = HypothesisAgent::new(Arc::new(router), Some(50));
-        assert!(agent.is_ok());
-    }
+    let router = LlmRouter::for_tests();
+    let agent = HypothesisAgent::new(Arc::new(router), Some(50));
+    assert!(agent.is_ok());
 }
 
 #[tokio::test]
 async fn test_hypothesis_deduplication() {
-    let config = RouterConfig::default();
-    if let Ok(router) = LlmRouter::new(config) {
-        if let Ok(agent) = HypothesisAgent::new(Arc::new(router), Some(50)) {
+    let router = LlmRouter::for_tests();
+    if let Ok(agent) = HypothesisAgent::new(Arc::new(router), Some(50)) {
             let hypotheses = vec![
                 Hypothesis {
                     id: "1".to_string(),
@@ -81,15 +78,13 @@ async fn test_hypothesis_deduplication() {
             
             let deduplicated = agent.deduplicate_hypotheses(hypotheses);
             assert_eq!(deduplicated.len(), 2);
-        }
     }
 }
 
 #[tokio::test]
 async fn test_hypothesis_ranking() {
-    let config = RouterConfig::default();
-    if let Ok(router) = LlmRouter::new(config) {
-        if let Ok(agent) = HypothesisAgent::new(Arc::new(router), Some(50)) {
+    let router = LlmRouter::for_tests();
+    if let Ok(agent) = HypothesisAgent::new(Arc::new(router), Some(50)) {
             let mut hypotheses = vec![
                 Hypothesis {
                     id: "1".to_string(),
@@ -122,7 +117,6 @@ async fn test_hypothesis_ranking() {
             let ranked = agent.rank_hypotheses(hypotheses.clone());
             assert_eq!(ranked[0].id, "2");
             assert_eq!(ranked[1].id, "1");
-        }
     }
 }
 
@@ -216,9 +210,8 @@ fn test_hypothesis_owasp_references() {
 
 #[tokio::test]
 async fn test_hypothesis_chunking() {
-    let config = RouterConfig::default();
-    if let Ok(router) = LlmRouter::new(config) {
-        if let Ok(agent) = HypothesisAgent::new(Arc::new(router), Some(3)) {
+    let router = LlmRouter::for_tests();
+    if let Ok(agent) = HypothesisAgent::new(Arc::new(router), Some(3)) {
             let hypotheses: Vec<Hypothesis> = (0..10)
                 .map(|i| Hypothesis {
                     id: format!("h{}", i),
@@ -241,6 +234,5 @@ async fn test_hypothesis_chunking() {
             // Verify total hypotheses are preserved
             let total: usize = chunks.iter().map(|c| c.len()).sum();
             assert_eq!(total, 10);
-        }
     }
 }

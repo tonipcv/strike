@@ -9,8 +9,10 @@ pub struct Finding {
     pub run_id: Uuid,
     pub timestamp: DateTime<Utc>,
     pub title: String,
+    pub description: String,
     pub vuln_class: VulnClass,
     pub severity: Severity,
+    pub confidence: f32,
     pub cvss_v4_score: CvssV4Score,
     pub status: FindingStatus,
     pub target: Target,
@@ -52,6 +54,17 @@ impl Severity {
             Self::Medium => "medium",
             Self::Low => "low",
             Self::Info => "info",
+        }
+    }
+    
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s.to_lowercase().as_str() {
+            "critical" => Some(Self::Critical),
+            "high" => Some(Self::High),
+            "medium" => Some(Self::Medium),
+            "low" => Some(Self::Low),
+            "info" => Some(Self::Info),
+            _ => None,
         }
     }
 }
@@ -181,8 +194,10 @@ impl Finding {
             run_id,
             timestamp: Utc::now(),
             title,
+            description: String::new(),
             vuln_class,
             severity,
+            confidence: 0.0,
             cvss_v4_score,
             status: FindingStatus::Unconfirmed,
             target,
@@ -198,6 +213,69 @@ impl Finding {
             retest_history: Vec::new(),
             human_review: None,
         }
+    }
+    
+    pub fn new_simple(
+        run_id: Uuid,
+        title: String,
+        vuln_class: VulnClass,
+        target: Target,
+    ) -> Self {
+        use super::{HttpTrace, CvssSeverity, BaseMetrics, Impact};
+        use super::{AttackVector, AttackComplexity, AttackRequirements, PrivilegesRequired, UserInteraction};
+        
+        let cvss_v4_score = CvssV4Score {
+            score: 7.0,
+            severity: CvssSeverity::High,
+            vector: String::new(),
+            base_metrics: BaseMetrics {
+                attack_vector: AttackVector::Network,
+                attack_complexity: AttackComplexity::Low,
+                attack_requirements: AttackRequirements::None,
+                privileges_required: PrivilegesRequired::None,
+                user_interaction: UserInteraction::None,
+                confidentiality: Impact::High,
+                integrity: Impact::High,
+                availability: Impact::None,
+            },
+            environmental_metrics: None,
+            threat_metrics: None,
+        };
+        
+        let evidence = Evidence::new(
+            HttpTrace {
+                method: target.method.as_str().to_string(),
+                url: target.full_url(),
+                headers: std::collections::HashMap::new(),
+                body: None,
+                status_code: None,
+                timestamp: chrono::Utc::now(),
+            },
+            HttpTrace {
+                method: "RESPONSE".to_string(),
+                url: target.full_url(),
+                headers: std::collections::HashMap::new(),
+                body: None,
+                status_code: Some(200),
+                timestamp: chrono::Utc::now(),
+            },
+            "ValidationAgent".to_string(),
+        );
+        
+        let environment = Environment {
+            tag: EnvironmentTag::Local,
+            target_build_sha: None,
+            strike_version: env!("CARGO_PKG_VERSION").to_string(),
+            run_config_hash: String::new(),
+        };
+        
+        let authorization = Authorization {
+            authorized_by: "system".to_string(),
+            authorized_at: chrono::Utc::now(),
+            roe_reference: "default".to_string(),
+        };
+        
+        Self::new(run_id, title, vuln_class, cvss_v4_score, target, evidence, environment, authorization)
     }
 
     pub fn confirm(&mut self) {

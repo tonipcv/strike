@@ -1,4 +1,3 @@
-use anyhow::Result;
 
 pub enum ReportFormat {
     Json,
